@@ -1,0 +1,30 @@
+To use these scripts you must have installed LFS using my LFS-BuildScripts.
+Copy blfs03.sh, blfsa, blfsfiles.tar.xz and pkgorder.sh to $LFS. Edit blfs03.sh to add your group and username at the end. I have put a placeholder called john. Then run the script.
+
+Run blfsa as root from your host. Make sure you have already chrooted into LFS from another screen. The script will install section by section, as per the blfs book. Not all sections are in the script at the moment, but the main ones are.
+
+When you first run blfsa, svn the book, download the sources and set the section to libraries. This will create a script called libraries.sh in $LFS and will download the sources to /blfs-sources/libraries in $LFS. Then run the libraries script from within the chroot environment.
+Carry on like this for each section. The available sections are listed in the config file editor.
+
+I've included pkgorder.sh which is a suggested order for running the scripts so that the dependencies are met as fast as possible. In order to run pkgorder.sh you must have created all the sections mentioned there and have downloaded all the sources. To try and make this easier, I've included an option ALL in the SECTION edit of the config file. This will create the scripts for all the sections and if you have SOURCES set to download, it will download all the sources. I don't recommend this because it'll probably take forever to download all the sources in one go and to be honest I've never tried doing this, so it may not work - but if you're feeling adventurous and you've got a fast connection, give it a go. It'll sure save a lot of time if it's successful. The option ALL is really there to create all the scripts in one go. I've done this and it does work.
+
+blfsfiles.tar.xz is unpacked to /blfsBuildFiles/blfsfiles and contains all the definitions necessary to build the scripts. You will see two types of files:
+$SECTION-files and $SECTION-dependencies. Have a look at these files. The -files have three names for each package. The first is the package name used to install the package. The second is the name of the source file (minus the version) and the third name is that used in the commands from the xml files. These are in /blfs-commands after you've downloaded the book xml. You can change the order of the packages to try and maximize the rate at which dependencies are met. You can also delete packages if you don't want them or add them as you require. I've included a jhbuild.list file to show you the order that gnome's jhbuild suggests for a gnome-3.2 build.
+
+The -dependencies files show the dependencies for each package (doh). These should correspond to 'Required' + 'Recommended' in the book. Edit them as things change, as they do frequently - partilculary if a package's section is changed. Recently clutter went from libraries to xlibs, for example.
+
+Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. You have to specify the correct SECTION for this single package otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
+
+Problems - 
+
+I've included a java jdk binary file (jdk1.7u4) in the blfsfiles tar file because blfs no longer installs this. It suggests installing IcedTea but I haven't tried to automate that yet - may be never. When you run programming.sh, the jdk installs to /opt.
+
+There is a problem with installing MesaLib. In the make, it gets to running makedepend and hangs. I don't know why. You should go to your host screen and do ps aux. Then kill -9 pid of su mesalib. This will stop the process. Then delete build in /usr/src/x/mesalib. su mesalib, cd Mesa* and just type make. It will complete and you can then make install. Don't forget to do: cd .. and touch .mesalib to stop it building from the script when you rerun x.sh.
+
+In the book the blfs-bootscripts are usually installed immediately after a package. The package scripts do not do this so you will have to install the bootscripts yourself. Run blfsa and choose section blfs and download for the SOURCES. This will create blfs.sh. To install a script do: ./blfs.sh <scriptname>  e.g. ./blfs.sh dbus or ./blfs.sh httpd. The scripts are installed with package-user name blfs-btscrpts.
+
+blfsa is fairly large (over 4300 lines) so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site.
+
+Thanks
+
+TODO - add Xfce as an alternative to Gnome.
