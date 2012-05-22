@@ -15,6 +15,8 @@ The -dependencies files show the dependencies for each package (doh). These shou
 
 Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. You have to specify the correct SECTION for this single package otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
 
+BTW, I should mention that I've removed a lot of the package documentation from the install. If you need the docs, you should reinstall the package yourself. Also there are no tests run.
+
 Problems - 
 
 I've included a java jdk binary file (jdk1.7u4) in the blfsfiles tar file because blfs no longer installs this. It suggests installing IcedTea but I haven't tried to automate that yet - may be never. When you run programming.sh, the jdk installs to /opt.
