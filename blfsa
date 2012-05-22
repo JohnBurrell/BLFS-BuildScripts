@@ -13,7 +13,7 @@ REPO="BLFS"
 DumpedCommands=$LFS/blfs-commands
 Dumpedhtml=$LFS/blfs-html
 WgetOpts="" # Options for wget, e.g. proxy settings etc
-RETURN_PARAM=35  # errot return
+RETURN_PARAM=35  # error return
 RETURN_NOTSET=37 # file does not exist
 RETURN_DEPNOTMET=39 # package dependency not met
 RETURN_ALLDEPSMET=41 # all dependencies met
@@ -35,8 +35,8 @@ SOURCES=$SOURCES
 BOOK=$BOOK
 SECTION=$SECTION
 XORG_PREFIX=$XORG_PREFIX
-SINGLE_PACKAGE="no"
 BROWSER="firefox" # specify which browser you want to install
+SINGLE_PACKAGE="no"
 
 if [ -e $cfg ]; then
   source $cfg # exists so source it
@@ -62,6 +62,7 @@ else
   echo "BOOK=$BOOK" | tee -a $cfg
   echo "SECTION=$SECTION" | tee -a $cfg
   echo "XORG_PREFIX=$XORG_PREFIX" | tee -a $cfg
+  echo "BROWSER=$BROWSER" | tee -a $cfg
   echo "SINGLE_PACKAGE"="no" | tee -a $cfg
 fi
 #
@@ -102,9 +103,15 @@ _edit () {
    elif [ $tochange = "SOURCES" ]; then
      display="download (or) local (if local, must be in ${LFS}${sourcedir}/${SECTION})"
    elif [ $tochange = "SECTION" ]; then
-     display="options are blfs, security, libraries, genUtils, sysUtils, programming, networks, server, x, xlibs, gnomePlatform, gnomeDesktop, gnomeUtils, gnomeAddLibs, gnomeAddUtils, xSoftware, multimedia, pst or ALL"
+     display="options are blfs, security, libraries, genUtils, sysUtils, programming, networks, server, x, xlibs, gnomePlatform, gnomeDesktop, gnomeUtils, gnomeAddLibs, gnomeAddUtils, xfce, browser, xSoftware, multimedia, pst, or ALL"
    elif [ $tochange = "XORG_PREFIX" ]; then
      display="Choose the installation prefix for Xorg"
+   elif [ $tochange = "BROWSER" ]; then
+     if [ "$SECTION" = browser ]; then
+       display="Type firefox or seamonkey"
+     else
+       display="Type firefox or seamonkey. Set SECTION to browser to install it."
+     fi
    elif [ $tochange = "SINGLE_PACKAGE" ]; then
      if [ "$SECTION" = ALL ]; then
      display="Name of single package to install. There is no section ALL, so change it to the correct section for the package you have specified."
@@ -435,8 +442,10 @@ fi
 CleanSourceDir () {
 SOURCEDIR=${LFS}${sourcedir}
 WgetList=wget-list
+SortedFile=sortedfile
 DirToClean=${SOURCEDIR}/${1}
 wgetFile=${DirToClean}/${WgetList}
+sortedFile=${DirToClean}/${SortedFile}
 if [ -d $DirToClean ]; then
   if [ "$(ls -A $DirToClean)" ]; then
     for File in ${DirToClean}/*
@@ -449,6 +458,7 @@ if [ -d $DirToClean ]; then
       fi
     done
     if [ -e $wgetFile ]; then rm $wgetFile; fi
+    if [ -e $sortedFile ]; then rm $sortedFile; fi
   else
      echo "directory $DirToClean is empty"
   fi
@@ -462,6 +472,7 @@ GetSources () {
 declare -a srcname=("${!2}")
 pkgfile=$WgetList
 lstFile="wget-list"
+sortedfile="sortedfile"
 if [ ! -e "$pkgfile" ]; then
   echo "\""$pkgfile"\" does not exist. Please download wget-list"
   exit 1
@@ -487,8 +498,15 @@ do
     grep -i $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
   fi
 done
+# make sure there are no duplicate lines
+sort -u ${SOURCEDIR}/${lstFile} > ${SOURCEDIR}/${sortedfile}
+if [[ "$BROWSER" == firefox ]]; then
+  sed -i '/seamonkey-/d' ${SOURCEDIR}/${sortedfile}
+elif [[ "$BROWSER" == seamonkey ]]; then
+  sed -i '/firefox-/d' ${SOURCEDIR}/${sortedfile}
+fi
 # download the sources
-wgetfile=${SOURCEDIR}/${lstFile}
+wgetfile=${SOURCEDIR}/${sortedfile}
 wget -i $wgetfile -P $SOURCEDIR
 #
 if [[ "$Section" = x || "$Section" = ALL ]]; then # get all the extra files
@@ -703,38 +721,27 @@ for (( i=0; i<$numb; i++ ))
 do
   case "${buildWrap[$i]}" in
     configure_commands*)
-      combine[$countc]=${buildWrap[$countbl]}
-      ((countc++))
-      ((countbl++))
-      combine[$countc]=${buildWrap[$countbl]} # the {: line
-      ((countbl++))
-      ((countc++))
-      until [[ "${commands[$countg]}" == make* || "${commands[$countg]}" == *install* ]]; do
-        case "${commands[$countg]}" in
+      combine[countc++]=${buildWrap[countbl++]}
+      combine[countc++]=${buildWrap[countbl++]} # the {: line
+      until [[ "${commands[countg]}" == make* || "${commands[countg]}" == *install* ]]; do
+        case "${commands[countg]}" in
          *\\)
-             storit[$cont]="${commands[$countg]}"
-             ((cont++))
-             ((countg++))
+             storit[cont++]="${commands[countg++]}"
            ;;
            *)
                #deal with continuation lines
               if [ $cont -gt 0 ]; then # continuation line found
                  for (( l=0; l<$cont; l++ )); do
-                   combine[$countc]="  ${storit[$l]}"
-                   ((countc++))
+                   combine[countc++]="  ${storit[l]}"
                  done
-                 combine[$countc]="  ${commands[$countg]}"
-                 ((countc++))
-                 ((countg++))
+                 combine[countc++]="  ${commands[countg++]}"
                  cont=0
                  inc=true
               else
-                combine[$countc]="  ${commands[$countg]}" # configure commands
-                ((countc++))
-                ((countg++))
+                combine[countc++]="  ${commands[countg++]}" # configure commands
                 inc=true # found at least one configure command
               fi
-              if [[ "${commands[$countg]}" == *install* || $countg -eq $numc ]]; then
+              if [[ "${commands[countg]}" == *install* || $countg -eq $numc ]]; then
                 break
               fi
            ;;
@@ -742,50 +749,35 @@ do
       done
       if [ $cont -gt 0 ]; then
         for (( l=0; l<$cont; l++ )); do
-          combine[$countc]="  ${storit[$l]}"
-          ((countc++))
+          combine[countc++]="  ${storit[l]}"
         done
-        combine[$countc]="  ${commands[$countg]}"
-        ((countc++))
-        ((countg++))
+        combine[countc++]="  ${commands[countg++]}"
         inc=true
       fi
       if ! $inc; then
-        combine[$countc]='  echo "no configure script for this package"'
-        ((countc++))
+        combine[countc++]='  echo "no configure script for this package"'
       fi
       ;;
     make_commands*)
       inc=false
       cont=0
-      combine[$countc]=${buildWrap[$countbl]}
-      ((countc++))
-      ((countbl++))
-      combine[$countc]=${buildWrap[$countbl]} # the {: command
-      ((countc++))
-      ((countbl++))
-      until [[ "${commands[$countg]}" == *install* || "${commands[$countg]}" == SEGMENTS* ]]; do
-       case "${commands[$countg]}" in
+      combine[countc++]=${buildWrap[countbl++]}
+      combine[countc++]=${buildWrap[countbl++]} # the {: command
+      until [[ "${commands[countg]}" == *install* || "${commands[countg]}" == SEGMENTS* ]]; do
+       case "${commands[countg]}" in
          *\\)
-            storit[$cont]="${commands[$countg]}"
-             ((cont++))
-             ((countg++))
+            storit[cont++]="${commands[countg++]}"
            ;;
            *)
              if [ $cont -gt 0 ]; then # continuation line found
                for (( l=0; l<$cont; l++ )); do
-                 combine[$countc]="  ${storit[$l]}"
-                 ((countc++))
+                 combine[countc++]="  ${storit[l]}"
                done
-               combine[$countc]="  ${commands[$countg]}"
-               ((countc++))
-               ((countg++))
+               combine[countc++]="  ${commands[countg++]}"
                cont=0
                inc=true
              else
-               combine[$countc]="  ${commands[$countg]}" # make commands
-               ((countc++))
-               ((countg++))
+               combine[countc++]="  ${commands[countg++]}" # make commands
                inc=true #at least one make command found
              fi
              if [ $countg -eq $numc ]; then # no more commands left
@@ -799,88 +791,68 @@ do
         esac
        done
        if ! $inc; then
-         combine[$countc]='  echo "no make script for this package"'
-         ((countc++))
+         combine[countc++]='  echo "no make script for this package"'
        fi
       ;;
     install_commands*)
       inc=false
       foundDoc=false
-      combine[$countc]=${buildWrap[$countbl]}
-      ((countc++))
-      ((countbl++))
-      combine[$countc]=${buildWrap[$countbl]} # the {: command
-      ((countc++))
-      ((countbl++))
+      combine[countc++]=${buildWrap[countbl++]}
+      combine[countc++]=${buildWrap[countbl++]} # the {: command
        case "${commands[$countg]}" in
          *install*)
                if [ $cont -gt 0 ]; then # there is a continuation line
                  for (( il=0; il<$cont; il++ )); do
-                 combine[$countc]="  ${storit[$il]}"
-                 ((countc++))
+                 combine[countc++]="  ${storit[il]}"
                  done
                  cont=0
                fi
                case "${commands[$countg]}" in
                  *\\) # install continuation line so store it
-                    storit[$cont]="${commands[$countg]}"
-                    ((cont++))
-                    ((countg++))
+                    storit[cont++]="${commands[countg++]}"
                  ;;
                  *)
                     if [ $cont -gt 0 ]; then # continuation line found
                       for (( l=0; l<$cont; l++ )); do
-                        combine[$countc]="  ${storit[$l]}"
-                        ((countc++))
+                        combine[countc++]="  ${storit[l]}"
                       done
-                      combine[$countc]="  ${commands[$countg]}"
-                      ((countc++))
-                      ((countg++))
+                      combine[countc++]="  ${commands[countg++]}"
                       cont=0
                       inc=true
                     else
-                      combine[$countc]="  ${commands[$countg]}" # install commands
-                      ((countc++))
-                      ((countg++))
+                      combine[countc++]="  ${commands[countg++]}" # install commands
                       inc=true #at least one install command found
                       cont=0
                     fi
                     if [ $countg -eq $numc ]; then # no more commands left
                       :
                     else           # test if more install commands
-                      until [[ "${commands[$countg]}" != install* && "${commands[$countg]}" != make* ]]; do
-                            case "${commands[$countg]}" in
+                      until [[ "${commands[countg]}" != install* && "${commands[countg]}" != make* ]]; do
+                            case "${commands[countg]}" in
                                *doc*)
                                   foundDoc=true
                                   break
                                ;;
                                *\\) # install continuation line so store it
-                                  storit[$cont]="${commands[$countg]}"
-                                  ((cont++))
-                                  ((countg++))
+                                  storit[cont++]="${commands[countg++]}"
                                ;;
                                *) # write out the install command - not a doc
-                                 combine[$countc]="  ${commands[$countg]}" # install commands
-                                 ((countc++))
-                                 ((countg++))
+                                 combine[countc++]="  ${commands[countg++]}" # install commands
                                  inc=true # just making sure!
                                ;;
                             esac
                       done
                       if ! $foundDoc; then #write out any cont lines
                         if [ $cont -gt 0 ]; then # continuation line found
-                          case "${commands[$countg]}" in
+                          case "${commands[countg]}" in
                              *doc*)
                                 ((countg++)) # doc so don't write this line
                              ;;
                              *)
                                 for (( l=0; l<$cont; l++ )); do
-                                  combine[$countc]="  ${storit[$l]}"
-                                  ((countc++))
+                                  combine[countc++]="  ${storit[l]}"
                                 done
-                                combine[$countc]="  ${commands[$countg]}"
-                                ((countc++))
-                                ((countg++))
+                                combine[countc++]="  ${commands[countg++]}"
                                 cont=0
                               ;;
                            esac
@@ -891,19 +863,14 @@ do
                esac
          ;;
          SEGMENTS*) # mysql install uses env variable SEGMENTS
-              until [[ "${commands[$countg]}" == unset* ]]; do
-                combine[$countc]="  ${commands[$countg]}"
-                ((countc++))
-                ((countg++))
+              until [[ "${commands[countg]}" == unset* ]]; do
+                combine[countc++]="  ${commands[countg++]}"
               done
-              combine[$countc]="  ${commands[$countg]}" # write unset SEGMENTS
-              ((countc++))
-              ((countg++))
+              combine[countc++]="  ${commands[countg++]}" # write unset SEGMENTS
          ;;
          *)
               if ! $inc; then
-                combine[$countc]='  echo "no install script for this package"'
-                ((countc++))
+                combine[countc++]='  echo "no install script for this package"'
               fi
          ;;
        esac
@@ -912,9 +879,8 @@ do
         if [ $i -lt $countbl ]; then
           :
         else
-          combine[$countc]=${buildWrap[$i]}
-          ((countc++))
-          ((countbl++))
+          combine[countc++]=${buildWrap[i]}
+          ((countbl++)) # increment because have written another build command
         fi
       ;;
   esac
@@ -948,7 +914,7 @@ case $1 in
   gnomePlatform|gnomeDesktop|gnomeUtils|gnomeAddLibs|gnomeAddUtils)
         xmlsec=gnome
   ;;
-  xSoftware)
+  xSoftware|browser)
         xmlsec=xsoft
   ;;
   multimedia)
@@ -962,6 +928,9 @@ case $1 in
   ;;
   x|xlibs)
         xmlsec=x
+  ;;
+  xfce)
+        xmlsec=xfce
   ;;
 esac
 } # end Getxmlsec
@@ -993,16 +962,14 @@ case $pkgname in
                 *configure*)
                        if ! $found; then
                          found=true
-                         bcom[$ic]=$tline
-                         ((ic++))
+                         bcom[ic++]=$tline
                        else
                          rtrnCom=(${bcom[@]})
                          return 0
                        fi
                   ;;
                   *)
-                        bcom[$ic]=$tline
-                        ((ic++))
+                        bcom[ic++]=$tline
                   ;;
                esac
              done
@@ -1019,23 +986,20 @@ case $pkgname in
                   *configure*)
                     if [ $numfc -eq 1 ]; then
                       foundconf=true # found 2nd occurrence of configure
-                      bcom[$ic]=$tline # write the configure
-                      ((ic++))
+                      bcom[ic++]=$tline # write the configure
                     else
                       ((numfc++))
                     fi
                   ;;
                   *install*)
                     if $foundconf; then
-                      bcom[$ic]=$tline
-                      ((ic++))
+                      bcom[ic++]=$tline
                       break
                     fi
                   ;;
                   *)
                     if $foundconf; then
-                      bcom[$ic]=$tline
-                      ((ic++))
+                      bcom[ic++]=$tline
                     fi
                   ;;
                esac
@@ -1052,22 +1016,19 @@ case $pkgname in
                   perl*)
                          if ! $found; then
                            found=true
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                          fi
                   ;;
                    *install*)
                          if $found; then
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                            rtrnCom=(${bcom[@]})
                            return 0
                          fi
                   ;;
                   *)
                          if $found; then
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                          fi
                   ;;
                esac
@@ -1082,13 +1043,11 @@ case $pkgname in
                case $tline in
                   *configure*|case*)
                            found=true
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                   ;;
                   *)
                          if $found; then # write all remaining lines
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                          fi
                   ;;
                esac
@@ -1107,14 +1066,12 @@ case $pkgname in
                            break # write no more lines
                          else
                            found=true
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                          fi
                   ;;
                   *)
                          if $found; then # write commands until next configure
-                           bcom[$ic]=$tline
-                           ((ic++))
+                           bcom[ic++]=$tline
                          fi
                   ;;
                esac
@@ -1132,15 +1089,13 @@ case $pkgname in
                      if ! $instfound; then
                        instfound=true
                      else
-                       bcom[$ic]=$tline
-                       ((ic++))
+                       bcom[ic++]=$tline
                        instfound=false
                      fi
                   ;;
                   *)
                      if ! $instfound; then #write the commands
-                       bcom[$ic]=$tline
-                       ((ic++))
+                       bcom[ic++]=$tline
                      fi
                   ;;
                esac
@@ -1158,15 +1113,13 @@ case $pkgname in
                     if ! $cdfound; then
                        cdfound=true
                      else
-                       bcom[$ic]=$tline
-                       ((ic++))
+                       bcom[ic++]=$tline
                        cdfound=false
                      fi
                   ;;
                   *)
                      if ! $cdfound; then #write the commands
-                       bcom[$ic]=$tline
-                       ((ic++))
+                       bcom[ic++]=$tline
                      fi
                   ;;
                esac
@@ -1186,14 +1139,12 @@ case $pkgname in
                     if [ $catcount -ge 5 ]; then #ignore remaining commands
                       xmlcatfound=true
                     else
-                      bcom[$ic]=$tline
-                      ((ic++))
+                      bcom[ic++]=$tline
                      fi
                   ;;
                   *)
                      if ! $xmlcatfound; then #write the commands
-                       bcom[$ic]=$tline
-                       ((ic++))
+                       bcom[ic++]=$tline
                      fi
                   ;;
                esac
@@ -1222,90 +1173,112 @@ else
   commandScripts=(${rtrnCom[@]})
   numclines=${#commandScripts[@]} # # of commands
 #
-# place comands in output until first configure found
+# output commands until first configure found
   countg=0
   contline=0
   hereDoc=false
+  mozconfigfnd=false
   isSed=false
   for line in "${commandScripts[@]}"
   do
-    case "$line" in
-       *HERE_DOC*) # wpa_supp writes .config using a here document
-         if $hereDoc; then # been writing here doc lines - stop
-           hereDoc=false
-           echo "$line"
-           ((countg++))
-         else
-           hereDoc=true # keep writing lines until a terminator is found
-           echo "$line"
-           ((countg++))
-         fi
-       ;;
-       sed*)
+    if $mozconfigfnd; then
+       case "$line" in
+          EOF)
+            mozconfigfnd=false
+            echo "$line"
+            ((countg++))
+          ;;
+          *)
+            echo "$line"
+            ((countg++))
+          ;;
+       esac
+    else
+      case "$line" in
+        *HERE_DOC*) # wpa_supp writes .config using a here document
+          if $hereDoc; then # been writing here doc lines - stop
+            hereDoc=false
+            echo "$line"
+            ((countg++))
+          else
+            hereDoc=true # keep writing lines until a terminator is found
+            echo "$line"
+            ((countg++))
+          fi
+        ;;
+        'cat > mozconfig << "EOF"') # firefox and seamonkey write mozconfig
+            mozconfig=true
+            echo $line
+            ((countg++))
+        ;;
+        'cat > .mozconfig << "EOF"')
+            mozconfig=true
+            echo $line
+            ((countg++))
+        ;;
+        sed*)
 # test if sed has continuation line
-         case "$line" in
+          case "$line" in
             *\\)
               isSed=true # this is a sed with cont lines
-              cacheit[$contline]="$line"
-              ((contline++))
+              cacheit[contline++]="$line"
               ((countg++))
             ;;
             *)
               echo "$line"
               ((countg++))
             ;;
-         esac
-       ;;
-       export*) # env variables being set up, e.g. llvm
-         echo "$line"
-         ((countg++))
-       ;;
-       *configure*|*Configure*|*bootstrap*|*config*|*autogen.sh*|cmake*) # boost is bootstrap, openssl is config mysql is cmake
-         if $isSed; then # write out the sed lines
-           for (( l=0; l<$contline; l++ )); do
-             echo "${cacheit[$l]}"
-           done
-           echo "$line"
-           contline=0
-           ((countg++))
-           isSed=false # finished with this sed command
-         else
-           if [ $contline -gt 0 ]; then countg=$countg-$contline; fi
-           break
-         fi
-       ;;
-       make*) #begins with make
-         if $isSed; then # write out the sed lines
-           for (( l=0; l<$contline; l++ )); do
-             echo "${cacheit[$l]}"
-           done
-           echo "$line"
-           contline=0
-           ((countg++))
-           isSed=false # finished with this sed command
-         else
-           break
-         fi
-       ;;
-       *)
-         if $isSed; then # write out the sed lines
-           for (( l=0; l<$contline; l++ )); do
-             echo "${cacheit[$l]}"
-           done
-           contline=0
-           isSed=false # finished with this sed command
-         fi
+          esac
+        ;;
+        export*) # env variables being set up, e.g. llvm
+          echo "$line"
+          ((countg++))
+        ;;
+        *configure*|*Configure*|*bootstrap*|*config*|*autogen.sh*|cmake*) # boost is bootstrap, openssl is config mysql is cmake
+          if $isSed; then # write out the sed lines
+            for (( l=0; l<$contline; l++ )); do
+              echo "${cacheit[l]}"
+            done
+            echo "$line"
+            contline=0
+            ((countg++))
+            isSed=false # finished with this sed command
+          else
+            if [ $contline -gt 0 ]; then countg=$countg-$contline; fi
+            break
+          fi
+        ;;
+        make*) #begins with make
+          if $isSed; then # write out the sed lines
+            for (( l=0; l<$contline; l++ )); do
+              echo "${cacheit[l]}"
+            done
+            echo "$line"
+            contline=0
+            ((countg++))
+            isSed=false # finished with this sed command
+          else
+            break
+          fi
+        ;;
+        *)
+          if $isSed; then # write out the sed lines
+            for (( l=0; l<$contline; l++ )); do
+              echo "${cacheit[l]}"
+            done
+            contline=0
+            isSed=false # finished with this sed command
+          fi
 # test if a continuation line - if so, store in cache
-         case "$line" in
+          case "$line" in
             *\\)
-             cacheit[$contline]="$line"
-             ((contline++))
-             ((countg++))
+              cacheit[contline++]="$line"
+              ((countg++))
             ;;
             *)
              if [ $contline -gt 0 ]; then # write out continuation line 
                for (( l=0; l<$contline; l++ )); do
-                 echo "${cacheit[$l]}"
+                 echo "${cacheit[l]}"
                done
                echo "$line"
                contline=0
@@ -1323,7 +1296,8 @@ else
             ;;
           esac
        ;;
-    esac
+      esac
+    fi
   done
 #
   rtr=""
@@ -1333,32 +1307,32 @@ else
   do
     echo $t
   done
-  if [ $countg -ne $((numclines)) ]; then # output remaining commands
+  if [ $countg -ne $numclines ]; then # output remaining commands
     contin=false
-    for (( k=$countg; k<$((numclines)); k++ ))
+    for (( k=$countg; k<$numclines; k++ ))
     do
-      if [[ "${commandScripts[$k]}" == install* ]]; then #don't install docs
-        if [[ "${commandScripts[$k]}" == *\\ ]]; then
+      if [[ "${commandScripts[k]}" == install* ]]; then #don't install docs
+        if [[ "${commandScripts[k]}" == *\\ ]]; then
           contin=true # continuation line found
         else
-          case ${commandScripts[$k]} in
+          case ${commandScripts[k]} in
              *doc*)
                 : # is a doc install, so skip
              ;;
              *)
-                echo ${commandScripts[$k]}
+                echo ${commandScripts[k]}
              ;;
           esac
         fi
       else
         if $contin; then
-          if [[ "${commandScripts[$k]}" == *\\ ]]; then # more continuation
+          if [[ "${commandScripts[k]}" == *\\ ]]; then # more continuation
             :
           else
             contin=false
           fi
         else
-          echo ${commandScripts[$k]}
+          echo ${commandScripts[k]}
         fi
       fi
     done
@@ -1382,53 +1356,39 @@ do
   case "${xbuild[$i]}" in
       section=*)
                repsec=${pkgname//x7/}
-               xcombine[$xcountc]="section=$repsec"
-               ((xcountc++))
+               xcombine[xcountc++]="section=$repsec"
       ;;
       *configure*)
-               until [[ "${xcommands[$xcountg]}" == *make* ]]; do
-                 case "${xcommands[$xcountg]}" in
+               until [[ "${xcommands[xcountg]}" == *make* ]]; do
+                 case "${xcommands[xcountg]}" in
                     *configure*)
-                         case "${xcommands[$xcountg]}" in
+                         case "${xcommands[xcountg]}" in
                             *\\)
-                               xcache[$xcont]="${xcommands[$xcountg]}"
-                               ((xcont++))
-                               ((xcountg++))
+                               xcache[xcont++]="${xcommands[xcountg++]}"
                             ;;
                             *)
-                             xcombine[$xcountc]=${xcommands[$xcountg]}
-                             ((xcountc++))
-                             ((xcountg++))
+                             xcombine[xcountc++]=${xcommands[xcountg++]}
                             ;;
                          esac
                    ;;
                    case*)
-                       until [[ "${xcommands[$xcountg]}" == esac* ]]; do
-                         xcombine[$xcountc]=${xcommands[$xcountg]}
-                         ((xcountc++))
-                         ((xcountg++))
+                       until [[ "${xcommands[xcountg]}" == esac* ]]; do
+                         xcombine[$countc++]=${xcommands[xcountg++]}
                        done
-                       xcombine[$xcountc]=${xcommands[$xcountg]} # write esac
-                       ((xcountc++))
-                       ((xcountg++))
+                       xcombine[xcountc++]=${xcommands[xcountg++]} # write esac
                    ;;
                    *)
-                      case "${xcommands[$xcountg]}" in
+                      case "${xcommands[xcountg]}" in
                         *\\)
-                            xcache[$xcont]="${xcommands[$xcountg]}"
-                            ((xcont++))
-                            ((xcountg++))
+                            xcache[xcont++]="${xcommands[xcountg++]}"
                         ;;
                         *)
                             if [ $xcont -gt 0 ]; then # continuation line
                               for (( l=0; l<$xcont; l++ )); do
-                                xcombine[$xcountc]=${xcache[$l]}
-                                ((xcountc++))
+                                xcombine[xcountc++]=${xcache[l]}
                               done
                               xcont=0
-                              xcombine[$xcountc]=${xcommands[$xcountg]}
-                              ((xcountc++))
-                              ((xcountg++))
+                              xcombine[xcountc++]=${xcommands[xcountg++]}
                             else
                               ((xcountg++))
                             fi
@@ -1439,12 +1399,10 @@ do
                done
       ;;
       make)
-               until [[ "${xcommands[$xcountg]}" == *install* ]]; do
-                 case "${xcommands[$xcountg]}" in
+               until [[ "${xcommands[xcountg]}" == *install* ]]; do
+                 case "${xcommands[xcountg]}" in
                     make)
-                       xcombine[$xcountc]=${xcommands[$xcountg]}
-                       ((xcountc++))
-                       ((xcountg++))
+                       xcombine[xcountc++]=${xcommands[xcountg++]}
                    ;;
                    *)
                        ((xcountg++))
@@ -1453,17 +1411,14 @@ do
                done
       ;;
       *install)
-                case "${xcommands[$xcountg]}" in
+                case "${xcommands[xcountg]}" in
                    *install*)
-                       xcombine[$xcountc]=${xcommands[$xcountg]}
-                       ((xcountc++))
-                       ((xcountg++))
+                       xcombine[xcountc++]=${xcommands[xcountg++]}
                    ;;
                 esac
       ;;
       *)
-                 xcombine[$xcountc]=${xbuild[$i]}
-                 ((xcountc++))
+                 xcombine[xcountc++]=${xbuild[i]}
       ;;
   esac
 done
@@ -1551,14 +1506,13 @@ else
 # test if a continuation line and store in cache
          case "$line" in
             *\\)
-             cacheit[$contline]="$line"
-             ((contline++))
+             cacheit[contline++]="$line"
              ((countg++))
             ;;
             *)
              if [ $contline -gt 0 ]; then # continuation line found
                for (( l=0; l<$contline; l++ )); do
-                 echo "${cacheit[$l]}"
+                 echo "${cacheit[l]}"
                done
                echo "$line"
                contline=0
@@ -1586,25 +1540,25 @@ else
   do
     echo $t
   done
-  if [ $countg -ne $((numclines)) ]; then # output remaining commands
+  if [ $countg -ne $numclines ]; then # output remaining commands
     contin=false
-    for (( k=$countg; k<$((numclines)); k++ ))
+    for (( k=$countg; k<$numclines; k++ ))
     do
-      if [[ "${commandScripts[$k]}" == install* ]]; then #don't install docs
-        if [[ "${commandScripts[$k]}" == *\\ ]]; then
+      if [[ "${commandScripts[k]}" == install* ]]; then #don't install docs
+        if [[ "${commandScripts[k]}" == *\\ ]]; then
           contin=true # continuation line found
         else
           :
         fi
       else
         if $contin; then
-          if [[ "${commandScripts[$k]}" == *\\ ]]; then # more continuation
+          if [[ "${commandScripts[k]}" == *\\ ]]; then # more continuation
             :
           else
             contin=false
           fi
         else
-          echo ${commandScripts[$k]}
+          echo ${commandScripts[k]}
         fi
       fi
     done
@@ -1675,25 +1629,25 @@ else
   do
     echo $t
   done
-  if [ $countg -ne $((numclines)) ]; then # output remaining commands
+  if [ $countg -ne $numclines ]; then # output remaining commands
     contin=false
-    for (( k=$countg; k<$((numclines)); k++ ))
+    for (( k=$countg; k<$numclines; k++ ))
     do
-      if [[ "${commandScripts[$k]}" == install* ]]; then #don't install docs
-        if [[ "${commandScripts[$k]}" == *\\ ]]; then
+      if [[ "${commandScripts[k]}" == install* ]]; then #don't install docs
+        if [[ "${commandScripts[k]}" == *\\ ]]; then
           contin=true # continuation line found
         else
           :
         fi
       else
         if $contin; then
-          if [[ "${commandScripts[$k]}" == *\\ ]]; then # more continuation
+          if [[ "${commandScripts[k]}" == *\\ ]]; then # more continuation
             :
           else
             contin=false
           fi
         else
-          echo ${commandScripts[$k]}
+          echo ${commandScripts[k]}
         fi
       fi
     done
@@ -3068,7 +3022,6 @@ EOF
      ;;
      bind)
            cat >> $Output << "EOF"
-
 groupadd -g 20 named
 useradd -c "BIND Owner" -g named -s /bin/false -u 20 named
 mknod /srv/named/dev/null c 1 3
@@ -3078,6 +3031,12 @@ chown -R named:named /srv/named
 echo "****************************************"
 echo "Edit /etc/resolv.conf to suit your needs"
 echo "****************************************"
+EOF
+     ;;
+     xfce4-session)
+           cat >> $Output << "EOF"
+echo john ${HOSTNAME} = NOPASSWD: /usr/lib/xfce4/session/xfsm-shutdown-helper \
+  >> /etc/sudoers
 EOF
      ;;
 esac
@@ -3099,112 +3058,112 @@ EOF
 resolvelinks () {
 case $pkgname in
     shadow)
-        Extra=""
+        doFirst=""
         links="/bin/su /etc/pam.d/other"
     ;;
     openssh)
-        Extra="install -v -m700 -d /var/lib/sshd && chown -v root:sys /var/lib/sshd && groupadd -g 50 sshd && useradd -c 'sshd PrivSep' -d /var/lib/sshd -g sshd -s /bin/false -u 50 sshd"
+        doFirst="install -v -m700 -d /var/lib/sshd && chown -v root:sys /var/lib/sshd && groupadd -g 50 sshd && useradd -c 'sshd PrivSep' -d /var/lib/sshd -g sshd -s /bin/false -u 50 sshd"
         links=""
     ;;
     net-tools)
-        Extra=""
+        doFirst=""
         links="/bin/hostname"
     ;;
     gperf) # has to re-create /usr/share/info/dir
-        Extra=""
+        doFirst=""
         links="/usr/share/info/dir"
     ;;
     apache-ant) # make sure JAVA_HOME is set
-        Extra="source /etc/profile.d/jdk.sh"
+        doFirst="source /etc/profile.d/jdk.sh"
         links=""
     ;;
     dbus)
-        Extra="groupadd -g 18 messagebus && useradd -c 'D-BUS Message Daemon User' -d /var/run/dbus -u 18 -g messagebus -s /bin/false messagebus"
+        doFirst="groupadd -g 18 messagebus && useradd -c 'D-BUS Message Daemon User' -d /var/run/dbus -u 18 -g messagebus -s /bin/false messagebus"
         links=""
     ;;
     alsa-utils)
-        Extra="chgrp install /usr/share/man && chmod g+w,o+t /usr/share/man"
+        doFirst="chgrp install /usr/share/man && chmod g+w,o+t /usr/share/man"
         links=""
     ;;
     faad2)
-        Extra="chgrp install /usr/share/man && chmod g+w,o+t /usr/share/man"
+        doFirst="chgrp install /usr/share/man && chmod g+w,o+t /usr/share/man"
         links=""
     ;;
     cups)
-        Extra="useradd -c 'Print Service User' -d /dev/null -g lp -s /bin/false -u 9 lp && chgrp install /var/spool && chmod g+w,o+t /var/spool"
+        doFirst="useradd -c 'Print Service User' -d /dev/null -g lp -s /bin/false -u 9 lp && chgrp install /var/spool && chmod g+w,o+t /var/spool"
         links=""
     ;;
     gtkplus3|gst-plgns-bad|at-spi2-atk|telepathy-logr|dconf|libgnomekbd|gset-dsktp-schms|caribou|gcr|gnome-keyring|gnome-session|yelp|mutter|gnome-shell)
-        Extra=""
+        doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
     gnome-set-daemon|evol-data-server|gnome-panel|metacity|tpthymisscntrl|baobab|brasero|epiphany|gcalctool|gnome-contacts|eog|gnome-dictionary|gvfs|gnome-games)
-        Extra=""
+        doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
     gnome-powr-mangr|gnome-sys-monitr|gnome-scrnshot|gnome-system-log|gucharmap|mousetweaks|vino|accerciser|gedit|ghex|totem|epiphany-ext|nautilus-sendto)
-        Extra=""
+        doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
     aisleriot|file-roller|evince|gnome-applets|evolution|ntwrk-mngr-applt|empathy|gnome-nettool)
-        Extra=""
+        doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /etc/gconf/gconf.xml.defaults/* /usr/share/icons/hicolor/icon-theme.cache"
     ;;
     gtkplus2) # has to own /usr/bin/gtk-update-icon-cache
-        Extra=""
+        doFirst=""
         links="/usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
     ;;
     nautilus|gnome-bluetooth|tracker|gnome-documents)
-        Extra=""
+        doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/share/icons/hicolor/icon-theme.cache"
     ;;
     qt4)
-        Extra="chgrp install /etc/ld.so.conf && chmod 664 /etc/ld.so.conf"
+        doFirst="chgrp install /etc/ld.so.conf && chmod 664 /etc/ld.so.conf"
         links=""
     ;;
     apache)
-        Extra=""
+        doFirst=""
         links="/usr/libexec/apache/build/mkdir.sh"
     ;;
     librsvg)
-        Extra=""
+        doFirst=""
         links="/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
     ;;
     pygobject3)
-        Extra=""
+        doFirst=""
         links="/usr/lib/python2.7/site-packages/gi/{repository/*,overrides/*,_gi*,*.p*}"
     ;;
     farstream)
-        Extra=""
+        doFirst=""
         links="/usr/lib/gstreamer-0.10/{libfsrawconference.*,libfsrtpconference.*,libfsmsnconference.*,libfsfunnel.*,libfsrtcpfilter.*,libfsvideoanyrate.*}"
     ;;
     libcanberra|gnome-serch-tool|libgweather|gnome-terminal)
-        Extra=""
+        doFirst=""
         links="/etc/gconf/gconf.xml.defaults/*"
     ;;
     vlc)
-        Extra="export QTDIR=/opt/qt && export PKG_CONFIG_PATH=/opt/qt/lib/pkgconfig"
+        doFirst="export QTDIR=/opt/qt && export PKG_CONFIG_PATH=/opt/qt/lib/pkgconfig"
         links=""
     ;;
     avahi)
-        Extra="groupadd -fg 86 netdev && export QTDIR=/opt/qt && export PKG_CONFIG_PATH=/opt/qt/lib/pkgconfig"
+        doFirst="groupadd -fg 86 netdev && export QTDIR=/opt/qt && export PKG_CONFIG_PATH=/opt/qt/lib/pkgconfig"
         links=""
     ;;
     gnome-icon-thme|gnm-icn-thme-ext|gnm-icn-thme-sym)
-        Extra=""
+        doFirst=""
         links="/usr/share/icons/gnome/icon-theme.cache"
     ;;
     gnome-session|gnome-panel|brasero|eog|accerciser)
-        Extra=""
+        doFirst=""
         links="/usr/share/icons/hicolor/icon-theme.cache"
     ;;
     *)
-        Extra=""
+        doFirst=""
         links=""
     ;;
 esac
 echo "resolvelinks () {
-$Extra
+$doFirst
 for link in $links
 do
   if [ -e "\$link" ]; then
@@ -3965,6 +3924,36 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    xfce4-session)
+       GetCommands \
+        | sed -e '/\*\*EDITMEUSERNAMEEDITME\*\*/,/sudoers/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    firefox)
+       GetCommands \
+        | sed -e '/Yasm/,/disable-libnotify/d' \
+              -e 's/\# ac_add_options --enable-startup-notification/ac_add_options --enable-startup-notification/' \
+              -e 's/\# ac_add_options --enable-system-sqlite/ac_add_options --enable-system-sqlite/' \
+              -e 's/\# ac_add_options --with-system-libvpx/ac_add_options --with-system-libvpx/' \
+              -e 's/\# ac_add_options --with-system-nspr/ac_add_options --with-system-nspr/' \
+              -e 's/\# ac_add_options --with-system-nss/ac_add_options --with-system-nss/' \
+              -e '/chown -R -v root:root \/usr\/lib\/firefox-12.0/,/ln -sv ..\/mozilla\/plugins \/usr\/lib\/firefox-12.0/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    seamonkey)
+       GetCommands \
+        | sed -e '/Yasm/,/disable-libnotify/d' \
+              -e 's/\# ac_add_options --enable-startup-notification/ac_add_options --enable-startup-notification/' \
+              -e 's/\# ac_add_options --enable-system-sqlite/ac_add_options --enable-system-sqlite/' \
+              -e 's/\# ac_add_options --with-system-libvpx/ac_add_options --with-system-libvpx/' \
+              -e 's/\# ac_add_options --with-system-nspr/ac_add_options --with-system-nspr/' \
+              -e 's/\# ac_add_options --with-system-nss/ac_add_options --with-system-nss/' \
+              -e '/make -C moz-build-dir install/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     *)
         GetCommands \
         | sed -e 's/\(.*\)&&$/\1/' \
@@ -4011,22 +4000,16 @@ else
         tdep=""
         stordep=""
         ndeps=($depline)
-        nlen=${#ndeps[@]}
-        for (( i=1; i<((nlen-1)); i++ ))
+        for (( i=1; i<${#ndeps[@]}-1; i++ ))
         do
-          tdep[ic]=${ndeps[$i]}
-          ((ic++))
+          tdep[ic++]=${ndeps[i]}
         done
         countd=0
-        numt=${#tdep[@]}
-        for (( k=0; k<$numt; k++ ))
+        for (( k=0; k<${#tdep[@]}; k++ ))
         do
-          pfile=$(echo ${tdep[$k]} | awk 'BEGIN {FS="/"}{print $2}')
-          testfile=${PKGUSERDIR}/${tdep[$k]}/.$pfile
-          if [ ! -f $testfile ]; then
-            stordep[$countd]=${tdep[$k]}
-            ((countd++))
-           fi
+          pfile=$(echo ${tdep[k]} | awk 'BEGIN {FS="/"}{print $2}')
+          testfile=${PKGUSERDIR}/${tdep[k]}/.$pfile
+          if [ ! -f $testfile ]; then stordep[countd++]=${tdep[k]}; fi
         done
         if [ $countd -gt 0 ]; then # some dependencies not met
           DepRtrn=(${stordep[@]})
@@ -4203,8 +4186,8 @@ REPODIR=${BLFS_BOOK_LOC_DIR}/$version
 Header
 pkguser
 numcharInstall
-if [[ "$Section" != blfs ]]; then
-  PkgDepend
+if [[ "$Section" != blfs ]]; then PkgDepend; fi
+if [[ "$Section" == gnomeDesktop || "$Section" == gnomeUtils ]]; then
   setMime
 fi
 numpkgs=${#PkgName[@]}
@@ -4212,10 +4195,10 @@ for (( pkgn=0; pkgn<$numpkgs; pkgn++ ))
 do
   if $single_package; then # find the package
     if [[ "$SINGLE_PACKAGE" == "${PkgName[$pkgn]}" ]]; then # found the package
-      pkgname=${PkgName[$pkgn]}
+      pkgname=${PkgName[pkgn]}
       FuncName=$( echo $pkgname | sed -e s/-//g -e s/_//g )
-      srcname=${SrcName[$pkgn]}
-      commandname=${CommandName[$pkgn]}
+      srcname=${SrcName[pkgn]}
+      commandname=${CommandName[pkgn]}
       if [[ "$cursection" != "$Section" ]]; then # section changed - reset
         cursection=$Section
         pkguser
@@ -4233,11 +4216,21 @@ do
       esac
       break
     fi
+  elif [[ "$Section" = browser ]]; then
+    if [[ "$BROWSER" == "${PkgName[$pkgn]}" ]]; then
+      pkgname=${PkgName[pkgn]}
+      FuncName=$( echo $pkgname | sed -e s/-//g -e s/_//g )
+      srcname=${SrcName[pkgn]}
+      commandname=${CommandName[pkgn]}
+      Output=$LFS/${Section}.sh
+      Function
+      break
+    fi
   else
-    pkgname=${PkgName[$pkgn]}
+    pkgname=${PkgName[pkgn]}
     FuncName=$( echo $pkgname | sed -e s/-//g -e s/_//g )
-    srcname=${SrcName[$pkgn]}
-    commandname=${CommandName[$pkgn]}
+    srcname=${SrcName[pkgn]}
+    commandname=${CommandName[pkgn]}
     if [[ "$cursection" != "$Section" ]]; then # section changed - reset
       cursection=$Section
       pkguser
