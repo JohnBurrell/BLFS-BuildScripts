@@ -719,7 +719,7 @@ cont=0 # continuation line
 #
 for (( i=0; i<$numb; i++ ))
 do
-  case "${buildWrap[$i]}" in
+  case "${buildWrap[i]}" in
     configure_commands*)
       combine[countc++]=${buildWrap[countbl++]}
       combine[countc++]=${buildWrap[countbl++]} # the {: line
@@ -827,14 +827,20 @@ do
                     if [ $countg -eq $numc ]; then # no more commands left
                       :
                     else           # test if more install commands
-                      until [[ "${commands[countg]}" != install* && "${commands[countg]}" != make* ]]; do
+                      until [[ "${commands[countg]}" != install* && "${commands[countg]}" != make* && "${commands[countg]}" != \#* ]]; do
                             case "${commands[countg]}" in
+                               *man[0-9]*) # probably writing man pages
+                                  combine[countc++]="  ${commands[countg++]}"
+                               ;;
                                *doc*)
                                   foundDoc=true
                                   break
                                ;;
                                *\\) # install continuation line so store it
                                   storit[cont++]="${commands[countg++]}"
+                               ;;
+                               \#*)
+                                  ((countg++)) # comment so ignore it
                                ;;
                                *) # write out the install command - not a doc
                                  combine[countc++]="  ${commands[countg++]}" # install commands
@@ -1174,45 +1180,43 @@ else
   numclines=${#commandScripts[@]} # # of commands
 #
 # output commands until first configure found
-  countg=0
+  countg=0 # # of commands wriiten out
   contline=0
-  hereDoc=false
+  wpa_sup=false
   mozconfigfnd=false
   isSed=false
   for line in "${commandScripts[@]}"
   do
-    if $mozconfigfnd; then
+    if $mozconfigfnd || $wpa_sup; then # never both true-in different sections
        case "$line" in
           EOF)
-            mozconfigfnd=false
             echo "$line"
             ((countg++))
+            if $mozconfigfnd; then 
+              mozconfigfnd=false
+            else
+              wpa_sup=false
+            fi
           ;;
-          *)
+          *)  # continue writing until an EOF found
             echo "$line"
             ((countg++))
           ;;
        esac
     else
       case "$line" in
-        *HERE_DOC*) # wpa_supp writes .config using a here document
-          if $hereDoc; then # been writing here doc lines - stop
-            hereDoc=false
-            echo "$line"
-            ((countg++))
-          else
-            hereDoc=true # keep writing lines until a terminator is found
-            echo "$line"
-            ((countg++))
-          fi
-        ;;
-        'cat > mozconfig << "EOF"') # firefox and seamonkey write mozconfig
-            mozconfig=true
+        'cat > wpa_supplicant/.config << "EOF"'|'cat >> wpa_supplicant/.config << "EOF"') # wpa_supp writes .config document
+            wpa_sup=true
             echo $line
             ((countg++))
         ;;
-        'cat > .mozconfig << "EOF"')
-            mozconfig=true
+        'cat > mozconfig << "EOF"') # firefox writes mozconfig
+            mozconfigfnd=true
+            echo $line
+            ((countg++))
+        ;;
+        'cat > .mozconfig << "EOF"') # seamonkey writes .mozconfig
+            mozconfigfnd=true
             echo $line
             ((countg++))
         ;;
@@ -1220,7 +1224,7 @@ else
 # test if sed has continuation line
           case "$line" in
             *\\)
-              isSed=true # this is a sed with cont lines
+              isSed=true # this is a sed with cont line(s)
               cacheit[contline++]="$line"
               ((countg++))
             ;;
@@ -1262,16 +1266,8 @@ else
           fi
         ;;
         *)
-          if $isSed; then # write out the sed lines
-            for (( l=0; l<$contline; l++ )); do
-              echo "${cacheit[l]}"
-            done
-            contline=0
-            isSed=false # finished with this sed command
-          fi
-# test if a continuation line - if so, store in cache
           case "$line" in
-            *\\)
+            *\\) # if a continuation line, store in cache
               cacheit[contline++]="$line"
               ((countg++))
             ;;
@@ -1282,14 +1278,15 @@ else
                done
                echo "$line"
                contline=0
+               isSed=false # finished with any sed command
                ((countg++)) # count # of commands written to output
-               if [ $countg -eq $numclines ]; then # finished
+               if [ $countg -eq $numclines ]; then # no more commands
                  return 0
                fi
              else
                echo "$line"
                ((countg++)) # count # of commands written to output
-               if [ $countg -eq $numclines ]; then # finished
+               if [ $countg -eq $numclines ]; then # no more commands
                  return 0 
                fi
              fi
@@ -1317,7 +1314,7 @@ else
         else
           case ${commandScripts[k]} in
              *doc*)
-                : # is a doc install, so skip
+                : # probably is a doc install, so skip
              ;;
              *)
                 echo ${commandScripts[k]}
@@ -1370,14 +1367,14 @@ do
                              xcombine[xcountc++]=${xcommands[xcountg++]}
                             ;;
                          esac
-                   ;;
-                   case*)
+                    ;;
+                    case*)
                        until [[ "${xcommands[xcountg]}" == esac* ]]; do
-                         xcombine[$countc++]=${xcommands[xcountg++]}
+                         xcombine[xcountc++]=${xcommands[xcountg++]}
                        done
                        xcombine[xcountc++]=${xcommands[xcountg++]} # write esac
-                   ;;
-                   *)
+                    ;;
+                    *)
                       case "${xcommands[xcountg]}" in
                         *\\)
                             xcache[xcont++]="${xcommands[xcountg++]}"
@@ -1394,7 +1391,7 @@ do
                             fi
                         ;;
                       esac 
-                   ;;
+                    ;;
                  esac
                done
       ;;
@@ -1444,7 +1441,7 @@ done
 if [[ "$pkgname" == x7font && $xcountg -ne $numclines ]]; then # output remaining commands
   for (( k=$xcountg; k<$numclines; k++ ))
   do
-    echo ${commandScripts[$k]}
+    echo ${commandScripts[k]}
   done
 fi
 return 0
@@ -1503,9 +1500,8 @@ else
        break
        ;;
        *)
-# test if a continuation line and store in cache
          case "$line" in
-            *\\)
+            *\\) # if a continuation line then store in cache
              cacheit[contline++]="$line"
              ((countg++))
             ;;
@@ -1943,10 +1939,10 @@ EOF
 } # end updatePkgUser
 #
 delSrcFile () {
-echo "
+echo "cd \$curdir
 cd ..
 count=0
-for f in *.tar.* # first any tar files
+for f in *.tar.* # any tar files present?
 do
   cdfile[\$count]=\${f%.tar.*}
   ((count++))
@@ -2071,6 +2067,7 @@ EOF
 unpack >> $Output
 cat >> $Output << "EOF"
 unpack
+curdir=$( echo $PWD ) #store the current dir in case dir changes
 EOF
   ;;
 esac
@@ -2133,12 +2130,6 @@ cat >> $Output << "EOF"
 endtime=$( date +%s )
 EOF
 case $pkgname in
-  icu|wpa_supplicant|db|ffmpeg|nss|samba) # up 2
-     delSrcFile | sed -e 's/cd ../cd ..\/../' >> $Output
-  ;;
-  xvid|spidermonkey) # up 3
-     delSrcFile | sed -e 's/cd ../cd ..\/..\/../' >> $Output
-  ;;
   cacerts|blfs-btscrpts|x7proto|x7lib|x7app|x7font|x7driver|xterm)
      : # don't delete any files
   ;;
@@ -2254,6 +2245,10 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /var/cache
 chmod g+w,o+t /var/cache
+chgrp install /usr/lib/perl5/site_perl/5.14.2 # needs to be done early
+chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2
+chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux
+chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux
 EOF
     ;;
     fontconfig) 
@@ -2280,13 +2275,9 @@ chgrp install /etc/ld.so.conf
 chmod 664 /etc/ld.so.conf
 EOF
     ;;
-    llvm)  #perl
+    llvm) 
           cat >> $Output << "EOF"
-chgrp install /usr/lib/perl5/site_perl/5.14.2
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2
-chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux
-sed -i "s/ABS_RUN_DIR\/lib/ABS_RUN_DIR\/lib\/llvm/" # for mesalib compile
+sed -i "s/ABS_RUN_DIR\/lib/ABS_RUN_DIR\/lib\/llvm/" /usr/bin/llvm-config # for mesalib compile
 EOF
     ;;
     xml-parser)  #perl
@@ -3295,7 +3286,7 @@ EOF
 cp ${sourcedir}/${SrcName}*.* .
 phpManual=php_manual_en.html.gz
 if [ ! -e $phpManual ]; then
-wget -O $phpManual http://us.php.net/get/php_manual_en.html.gz/from/this/mirror
+wget -O $phpManual http://us.php.net/get/${phpManual}/from/this/mirror
 fi
 cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
 EOF
@@ -3329,7 +3320,10 @@ EOF
    ;;
    llvm-)
     cat << "EOF"
-wget http://llvm.org/releases/3.0/clang-3.0.tar.gz
+clangSrc=clang-3.0.tar.gz
+if [ ! -e $clangSrc ]; then
+wget http://llvm.org/releases/3.0/${clangSrc}
+fi
 cp ${sourcedir}/${SrcName}*.* .
 cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
 EOF
@@ -3568,6 +3562,8 @@ case $pkgname in
         | sed -e '/install -v -m700 -d/,/-s \/bin\/false -u 50 sshd/d' \
               -e '/libcrypto.a -ldl/d' \
               -e '/grep FATAL check.log/d' \
+              -e 's/REMOTE_HOSTNAME/localhost/' \
+              -e '/echo "PasswordAuthentication/,/echo "ChallengeResponseAuthentication/d' \
               -e '/make install-sshd/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -3586,11 +3582,11 @@ case $pkgname in
     ;;
     wpa_supplicant)
        GetCommands \
-        | sed -e '/EDITMESSIDEDITME/d' \
-              -e '/wpa_supplicant -B -c/ i cat > \/etc\/rc.d\/init.d/wireless_wlan0 << "EOF"' \
+        | sed -e '/make BINDIR=/ i CFLAGS="-I/usr/include/libnl3/" \\' \
+              -e '/EDITMESSIDEDITME/d' \
+              -e '/ip addr add/,/ip route add default/d' \
+              -e '/wpa_supplicant -B/ i cat > /etc/rc.d/init.d/wireless_wlan0 << "EOF"' \
               -e '/dhcpcd/ a EOF' \
-              -e '/ip addr add 192.168.1.6 dev wlan0/ i cat > /dev/null << "EOF"' \
-              -e '/ip route add default via 192.168.1.1 dev wlan0/ a EOF' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -3649,10 +3645,11 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
-    git)
+    git) 
        GetCommands \
         | sed -e '/make man/,/make html/d' \
-              -e '/make install-man/,/git config/d' \
+              -e '/make install-man/d' \
+              -e '/make htmldir=/,/git config --system/d' \
               -e "/make install/ i sed -i '2459,2463d' Makefile" \
               -e '/make install/ a cp po\/build\/locale\/is\/LC_MESSAGES\/git.mo \/usr\/share\/locale\/is\/LC_MESSAGES\/' \
               -e 's/\(.*\)&&$/\1/' \
@@ -3906,6 +3903,7 @@ case $pkgname in
               -e '\/bin\/tests\/system\/ifconfig.sh/,/grep/d' \
               -e '/cd doc/,/useradd/d' \
               -e '/mknod/,/chmod/d' \
+              -e 's/rndc-confgen/\/usr\/sbin\/rndc-confgen/' \
               -e '/cp \/etc\/resolv.conf/,/dig www/d' \
               -e '/dig www.linuxfromscratch.org/d' \
               -e 's/\(.*\)&&$/\1/' \
