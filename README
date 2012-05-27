@@ -29,5 +29,6 @@ blfsa is fairly large (over 4300 lines) so there's bound to be bits that don't w
 
 Thanks
 
+Release1.3 - added --without-gnome to some packages when building xfce and adjusted dependencies
 Release1.2 - changed wpa_supplicant to match the changes in the latest book version
 Release1.1 - added Xfce as an alternative to Gnome and set up a browser, Firefox or Seamonkey
