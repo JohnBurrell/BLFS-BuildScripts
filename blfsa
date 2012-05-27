@@ -14,7 +14,7 @@ DumpedCommands=$LFS/blfs-commands
 Dumpedhtml=$LFS/blfs-html
 WgetOpts="" # Options for wget, e.g. proxy settings etc
 RETURN_PARAM=35  # error return
-RETURN_NOTSET=37 # file does not exist
+RETURN_NOTSET=37 #  no dependencies set
 RETURN_DEPNOTMET=39 # package dependency not met
 RETURN_ALLDEPSMET=41 # all dependencies met
 sourcedir=/blfs-sources
@@ -30,29 +30,41 @@ cfg=~/BLFS.conf # config file to hold required params
 #initialize the config variables
 BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO # define local dir for the downloaded book xml
 SVN_URL="svn://svn.linuxfromscratch.org/$REPO/" #svn url
-BOOK_VERSION="blank"
+BOOK_VERSION=$BOOK_VERSION
 SOURCES=$SOURCES
 BOOK=$BOOK
 SECTION=$SECTION
 XORG_PREFIX=$XORG_PREFIX
-BROWSER="firefox" # specify which browser you want to install
-SINGLE_PACKAGE="no"
-
+GNOME_OR_XFCE=$GNOME_OR_XFCE
+BROWSER=$BROWSER
+SINGLE_PACKAGE=$SINGLE_PACKAGE
 if [ -e $cfg ]; then
   source $cfg # exists so source it
 else
   touch $cfg #cfg is new
-  if [ -z $BOOK ]; then
-    BOOK="svn"
+  if [ -z $BOOK_VERSION ]; then
+    BOOK_VERSION="blank"
   fi
   if [ -z $SOURCES ]; then
     SOURCES="download"
+  fi
+  if [ -z $BOOK ]; then
+    BOOK="svn"
   fi
   if [ -z $SECTION ]; then
     SECTION="libraries"
   fi
   if [ -z $XORG_PREFIX ]; then
     XORG_PREFIX="/usr"
+  fi
+  if [ -z $GNOME_OR_XFCE ]; then
+    GNOME_OR_XFCE="gnome"
+  fi
+  if [ -z $BROWSER ]; then
+    BROWSER="firefox"
+  fi
+  if [ -z $SINGLE_PACKAGE ]; then
+    SINGLE_PACKAGE="no"
   fi
 # store the values in the new config file
   echo "BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO" | tee -a $cfg
@@ -62,6 +74,7 @@ else
   echo "BOOK=$BOOK" | tee -a $cfg
   echo "SECTION=$SECTION" | tee -a $cfg
   echo "XORG_PREFIX=$XORG_PREFIX" | tee -a $cfg
+  echo "GNOME_OR_XFCE=$GNOME_OR_XFCE" | tee -a $cfg
   echo "BROWSER=$BROWSER" | tee -a $cfg
   echo "SINGLE_PACKAGE"="no" | tee -a $cfg
 fi
@@ -106,6 +119,8 @@ _edit () {
      display="options are blfs, security, libraries, genUtils, sysUtils, programming, networks, server, x, xlibs, gnomePlatform, gnomeDesktop, gnomeUtils, gnomeAddLibs, gnomeAddUtils, xfce, browser, xSoftware, multimedia, pst, or ALL"
    elif [ $tochange = "XORG_PREFIX" ]; then
      display="Choose the installation prefix for Xorg"
+   elif [ $tochange = "GNOME_OR_XFCE" ]; then
+     display="type gnome or xfce - you can install one or the other, not both"
    elif [ $tochange = "BROWSER" ]; then
      if [ "$SECTION" = browser ]; then
        display="Type firefox or seamonkey"
@@ -490,12 +505,12 @@ do
   if $single_package; then # find the package
     if [[ "$SINGLE_PACKAGE" == "$sn" ]]; then # found the package
       tomatch="/${sn}"
-      grep -i $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
+      grep $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
       break
     fi
   else
     tomatch="/${sn}"
-    grep -i $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
+    grep $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
   fi
 done
 # make sure there are no duplicate lines
@@ -1013,7 +1028,7 @@ case $pkgname in
              rtrnCom=(${bcom[@]})
              return 0
       ;;
-      xml-parser|tie-ixhash|xml-simple)
+      xml-parser|tie-ixhash|xml-simple|extutls-dpnds|extutls-pkgcnfg|perl-glib|uri)
              ic=0
              found=false
              for tline in ${acom[@]}
@@ -1079,6 +1094,34 @@ case $pkgname in
                          if $found; then # write commands until next configure
                            bcom[ic++]=$tline
                          fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+      webkitgtk)
+             ic=0
+             conffound=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  sed*)
+                        bcom[ic++]=$tline
+                  ;;
+                  *configure*)
+                        if ! $conffound; then # first config found
+                          conffound=true
+                          bcom[ic++]=$tline
+                        else # 2nd config found - don't write
+                          conffound=false
+                        fi
+                  ;;
+                  *install)
+                        bcom[ic++]=$tline
+                  ;;
+                  *)
+                        if $conffound; then bcom[ic++]=$tline; fi
                   ;;
                esac
              done
@@ -1873,10 +1916,9 @@ if [[ "$Section" == blfs ]]; then
   echo 'bsToInstall=$1' >> $Output
 else
 echo "RETURN_PARAM=$RETURN_PARAM # exit with an error
-RETURN_NOTSET=$RETURN_NOTSET # file does not exist
+RETURN_NOTSET=$RETURN_NOTSET # no dependencies set
 RETURN_DEPNOTMET=$RETURN_DEPNOTMET # package dependency not met
-RETURN_ALLDEPSMET=$RETURN_ALLDEPSMET # all dependencies met
-" >> $Output
+RETURN_ALLDEPSMET=$RETURN_ALLDEPSMET # all dependencies met" >> $Output
 fi
 echo "me=\$0
 LFS=$LFS
@@ -1885,7 +1927,7 @@ sourcedir=$sourcedir
 blfsfiles=${blfsBuildFiles}/${blfsfiles}
 BuildLog=$BuildLog
 Section=$cursection
-PKGUSERDIR=${PKGUSERDIR}" >> $Output
+PKGUSERDIR=$PKGUSERDIR" >> $Output
 } # end Header
 #
 pkguser () {
@@ -2005,16 +2047,61 @@ if [ -e "${PkgUserDir}/${PkgName}/.${PkgName}" ]; then
   return
 fi
 # check for dependencies
+BuildScript=false
 FuncName=$( echo $PkgName | sed -e s/-//g -e s/_//g )
 DepRtrn=""
 PkgDepend
 return_val=$?
-if [ $return_val -eq 0 ]; then # all dependencies met so build script
-echo "No dependencies - building script for $PkgName"
-elif [ $return_val -eq $RETURN_ALLDEPSMET ]; then
-echo "All dependencies met - building script for $PkgName"
+if [[ $return_val -eq $RETURN_PARAM || $return_val -eq $RETURN_NOTSET ]]; then
+  echo "No dependencies - building script for $PkgName"
+  BuildScript=true
+elif [[ $return_val -eq 0 ]]; then # test if dependencies met
+EOF
+    case $pkgname in
+      glib-networking|libsoup|gvfs|webkitgtk|pulseaudio|gst-plgns-good|libcanberra)
+          if [ "$GNOME_OR_XFCE" = xfce ]; then
+            cat >> $Output << "EOF"
+  rtrPlessArray=""
+EOF
+            case $pkgname in
+              glib-networking)
+                cat >> $Output << "EOF"
+  delElementPattern DepRtrn[@] "gnomePlatform/gset-dsktp-schms"
+EOF
+              ;;
+              libsoup|gvfs)
+                cat >> $Output << "EOF"
+  delElementPattern DepRtrn[@] "gnomePlatform/libgnome-keyring"
+EOF
+              ;;
+              webkitgtk)
+                cat >> $Output << "EOF"
+  delElementPattern DepRtrn[@] "networks/geoclue"
+EOF
+              ;;
+              pulseaudio|gst-plgns-good|libcanberra)
+                cat >> $Output << "EOF"
+  delElementPattern DepRtrn[@] "gnomePlatform/gconf"
+EOF
+              ;;
+            esac
+            cat >> $Output << "EOF"
+  unset DepRtrn
+  DepRtrn=(${rtrPlessArray[@]})
+EOF
+          fi
+      ;;
+    esac
+cat >> $Output << "EOF"
+  rtrnDepNotMet=""
+  testDeps DepRtrn[@]
+  ret_val=$?
+  if [ $ret_val -eq $RETURN_ALLDEPSMET ]; then
+    echo "All dependencies met - building script for $PkgName"
+    BuildScript=true
+  fi
 fi
-if [[ $return_val -eq 0 || $return_val -eq $RETURN_ALLDEPSMET ]]; then
+if $BuildScript; then
 EOF
    ;;
 esac
@@ -2245,6 +2332,8 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /var/cache
 chmod g+w,o+t /var/cache
+chgrp install /usr/lib/perl5/5.14.2/i686-linux
+chmod g+w,o+t /usr/lib/perl5/5.14.2/i686-linux
 chgrp install /usr/lib/perl5/site_perl/5.14.2 # needs to be done early
 chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2
 chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux
@@ -2726,6 +2815,10 @@ chgrp install /usr/share/icons/hicolor/*/emblems
 chmod g+w,o+t /usr/share/icons/hicolor/*/emblems
 chgrp install /usr/share/icons/hicolor/*/categories
 chmod g+w,o+t /usr/share/icons/hicolor/*/categories
+chgrp install /usr/share/icons/hicolor/*/stock/navigation
+chmod g+w,o+t /usr/share/icons/hicolor/*/stock/navigation
+chgrp install /usr/share/icons/hicolor/*/stock/media
+chmod g+w,o+t /usr/share/icons/hicolor/*/stock/media
 EOF
      ;;
      sgml-common)
@@ -2771,7 +2864,12 @@ chgrp install /usr/lib/python2.7/site-packages/gtk-2.0
 chmod g+w,o+t /usr/lib/python2.7/site-packages/gtk-2.0
 chgrp install /usr/include/pygtk-2.0
 chmod g+w,o+t /usr/include/pygtk-2.0
-
+EOF
+     ;;
+     pygtk)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/pygtk/2.0/defs
+chmod g+w,o+t /usr/share/pygtk/2.0/defs
 EOF
      ;;
      clutter)
@@ -3024,8 +3122,69 @@ echo "Edit /etc/resolv.conf to suit your needs"
 echo "****************************************"
 EOF
      ;;
+     libxfce4util)
+           cat >> $Output << "EOF"
+chgrp install /usr/include/xfce4
+chmod g+w,o+t /usr/include/xfce4
+EOF
+     ;;
+     extutls-dpnds)
+           cat >> $Output << "EOF"
+chgrp install /usr/lib/perl5/site_perl/5.14.2/ExtUtils
+chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/ExtUtils
+chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto/ExtUtils
+chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto/ExtUtils
+EOF
+     ;;
+     garcon)
+           cat >> $Output << "EOF"
+chgrp install /etc/xdg
+chmod g+w,o+t /etc/xdg
+chgrp install /etc/xdg/menus
+chmod g+w,o+t /etc/xdg/menus
+EOF
+     ;;
+     parole)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/applications
+chmod g+w,o+t /usr/share/applications
+EOF
+     ;;
+     libxfce4ui)
+           cat >> $Output << "EOF"
+chgrp install /etc/xdg/xfce4
+chmod g+w,o+t /etc/xdg/xfce4
+chgrp install /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+chmod g+w,o+t /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+EOF
+     ;;
+     xfconf)
+           cat >> $Output << "EOF"
+chgrp install /usr/lib/xfce4
+chmod g+w,o+t /usr/lib/xfce4
+EOF
+     ;;
+     exo)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/xfce4
+chmod g+w,o+t /usr/share/xfce4
+EOF
+     ;;
+     thunar)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/Thunar/sendto
+chmod g+w,o+t /usr/share/Thunar/sendto
+EOF
+     ;;
+     xfce4pwrmngr)
+           cat >> $Output << "EOF"
+chgrp install /etc/xdg/autostart
+chmod g+w,o+t /etc/xdg/autostart
+EOF
+     ;;
      xfce4-session)
            cat >> $Output << "EOF"
+echo exec xfce4-session > ~/.xinitrc
 echo john ${HOSTNAME} = NOPASSWD: /usr/lib/xfce4/session/xfsm-shutdown-helper \
   >> /etc/sudoers
 EOF
@@ -3036,8 +3195,7 @@ cat >> $Output << "EOF"
 else
 echo "Script not run for package $PkgName"
 echo "unmet dependencies are:"
-depsOut=${DepRtrn[@]}
-echo ${depsOut[@]}
+echo ${rtrnDepNotMet[@]}
 fi
 EOF
 fi
@@ -3144,7 +3302,7 @@ case $pkgname in
         doFirst=""
         links="/usr/share/icons/gnome/icon-theme.cache"
     ;;
-    gnome-session|gnome-panel|brasero|eog|accerciser)
+    gnome-session|gnome-panel|brasero|eog|accerciser|xfce4-session)
         doFirst=""
         links="/usr/share/icons/hicolor/icon-theme.cache"
     ;;
@@ -3634,7 +3792,7 @@ case $pkgname in
     ;;
     dbus)
        GetCommands \
-        | sed -e '/groupadd/,/-u 18 -g messagebus -s /d' \
+        | sed -e '/groupadd/,/-u 18 -g messagebus/d' \
               -e '/make distclean/,/kill \$DBUS_SESSION_BUS_PID/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -3749,7 +3907,10 @@ case $pkgname in
     ;;
     alsa-utils)
        GetCommands \
-        | sed -e '/make install-alsa/,/usermod -a -G audio/d' \
+        | sed -e '/make install-alsa/d' \
+              -e 's[\*\*EDITME<username>EDITME\*\*['john'[' \
+              -e 's/alsactl/\/usr\/sbin\/alsactl/' \
+              -e 's/usermod/\/usr\/sbin\/usermod/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -3800,6 +3961,18 @@ case $pkgname in
     ;;
     libcdio)
        GetLibcdioCommands >> $Output
+    ;;
+    libcanberra)
+       if [ "$GNOME_OR_XFCE" = xfce ]; then
+         GetCommands \
+          | sed -e 's/oss/oss --disable-schemas-install/' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
     ;;
     opal)
        GetCommands \
@@ -3864,6 +4037,20 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    webkitgtk)
+       if [ "$GNOME_OR_XFCE" = xfce ]; then
+         GetCommands \
+          | sed -e "/sed -i 's\#=GST\#=\$GST\#' configure/d" \
+                -e 's/introspection/introspection --disable-geolocation --with-gtk=2.0/' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e "/sed -i 's\#=GST\#=\$GST\#' configure/d" \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
+    ;;
     qt4)
        GetCommands \
         | sed -e '/ldconfig/d' \
@@ -3890,6 +4077,42 @@ case $pkgname in
         | sed -e '/--enable-system-sqlite/ i --with-java=no \\' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
+    ;;
+    libsoup)
+       if [ "$GNOME_OR_XFCE" = xfce ]; then
+         GetCommands \
+          | sed -e 's/disable-static/disable-static --without-gnome/' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
+    ;;
+    librest)
+       if [ "$GNOME_OR_XFCE" = xfce ]; then
+         GetCommands \
+          | sed -e 's/prefix=\/usr/prefix=\/usr --without-gnome/' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
+    ;;
+    libgdata)
+       if [ "$GNOME_OR_XFCE" = xfce ]; then
+         GetCommands \
+          | sed -e 's/disable-static/disable-static --disable-gnome/' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
     ;;
     mbp-info)
        GetCommands \
@@ -3979,14 +4202,13 @@ done
 PkgDepend () {
 cat >> $Output << "EOF"
 PkgDepend () {
-declare -a stordep
 declare -a ndep
 declare -a tdep
 foundDep=false
 dpName=${FuncName}dep # package dependencies
 depfile=${blfsfiles}/${Section}-dependencies
 if [ ! -e $depfile ]; then
- return 0
+ return $RETURN_PARAM
 else
   while read depline
   do
@@ -4002,29 +4224,41 @@ else
         do
           tdep[ic++]=${ndeps[i]}
         done
-        countd=0
-        for (( k=0; k<${#tdep[@]}; k++ ))
-        do
-          pfile=$(echo ${tdep[k]} | awk 'BEGIN {FS="/"}{print $2}')
-          testfile=${PKGUSERDIR}/${tdep[k]}/.$pfile
-          if [ ! -f $testfile ]; then stordep[countd++]=${tdep[k]}; fi
-        done
-        if [ $countd -gt 0 ]; then # some dependencies not met
-          DepRtrn=(${stordep[@]})
-          return $RETURN_DEPNOTMET
-        else
-          return $RETURN_ALLDEPSMET # all dependencies met
-        fi
       ;;
     esac
   done < $depfile
   if ! $foundDep; then # no deps found for this package
-    return 0  
+    return $RETURN_NOTSET
+  else
+    DepRtrn=(${tdep[@]})
+    return 0
   fi
 fi
 } # end PkgDepend
 EOF
 } # end PkgDepend
+#
+testDeps () {
+cat >> $Output << "EOF"
+testDeps () {
+declare -a tstDeps=("${!1}")
+declare -a stordep
+countdep=0
+for (( k=0; k<${#tstDeps[@]}; k++ ))
+do
+  pfile=$(echo ${tstDeps[k]} | awk 'BEGIN {FS="/"}{print $2}')
+  testfile=${PKGUSERDIR}/${tstDeps[k]}/.$pfile
+  if [ ! -f $testfile ]; then stordep[countdep++]=${tstDeps[k]}; fi
+done
+if [ $countdep -gt 0 ]; then # some dependencies not met
+  rtrnDepNotMet=(${stordep[@]})
+  return $RETURN_DEPNOTMET
+else
+  return $RETURN_ALLDEPSMET # all dependencies met
+fi
+} # end testDeps
+EOF
+} # end testDeps
 #
 numcharInstall () { # get the number of chars in the install group
 cat >> $Output << "EOF"
@@ -4145,6 +4379,30 @@ done < $pkgFiles
 return $RETURN_PARAM
 } # end pkgInSection
 #
+delElement () { # deletes an element from a specified position in an array
+cat >> $Output << "EOF"
+delElement () {
+# array input in $1, position to delete is $2
+declare -a arrayIn=("${!1}")
+pos=$2
+arrayIn=(${arrayIn[@]:0:$pos} ${arrayIn[@]:$(($pos + 1))})
+rtrDelArray=(${arrayIn[@]})
+} # end delElement
+EOF
+} # end delElement
+#
+delElementPattern () { # deletes an array element that matches a pattern
+cat >> $Output << "EOF"
+delElementPattern () {
+# array input in $1, pattern to delete is $2
+declare -a arrayInput=("${!1}")
+patToMatch=$2
+declare -a delPatArray=( ${arrayInput[@]/$patToMatch*/} )
+rtrPlessArray=(${delPatArray[@]})
+} # end delElementPattern
+EOF
+} # end delElementPattern
+#
 min2 () { # return min of two integers
 if [ -z "$2" ]
 then
@@ -4184,7 +4442,13 @@ REPODIR=${BLFS_BOOK_LOC_DIR}/$version
 Header
 pkguser
 numcharInstall
-if [[ "$Section" != blfs ]]; then PkgDepend; fi
+if [ "$Section" != blfs ]; then
+  PkgDepend
+  testDeps
+fi
+if [[ "$Section" = networks || "$Section" = sysUtils || "$Section" = xlibs || "$Section" = multimedia ]]; then
+  delElementPattern
+fi
 if [[ "$Section" == gnomeDesktop || "$Section" == gnomeUtils ]]; then
   setMime
 fi
