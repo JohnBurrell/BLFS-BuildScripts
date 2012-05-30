@@ -21,7 +21,7 @@ Problems -
 
 I've included a java jdk binary file (jdk1.7u4) in the blfsfiles tar file because blfs no longer installs this. It suggests installing IcedTea but I haven't tried to automate that yet - may be never. When you run programming.sh, the jdk installs to /opt.
 
-There is a problem with installing MesaLib. In the make, it gets to running makedepend and hangs. I don't know why. You should go to your host screen and do ps aux. Then kill -9 pid of su mesalib. This will stop the process. Then delete build in /usr/src/x/mesalib. su mesalib, cd Mesa* and just type make. It will complete and you can then make install. Don't forget to do: cd .. and touch .mesalib to stop it building from the script when you rerun x.sh.
+There is a problem with installing MesaLib. In the make, it gets to running makedepend and hangs. I don't know why. You should go to your host screen and do ps aux. Then kill -9 pid of su mesalib. This will stop the process. Then delete build in /usr/src/x/mesalib. su mesalib, cd Mesa* and just type make. It will complete and you can then make install. Don't forget to do: cd .. and touch .mesalib to stop it building from the script when you rerun x.sh. Note added - there is a problem compiling mesalib against llvm-3.1. A patch is required, which I hope will appear in the book very soon.
 
 In the book the blfs-bootscripts are usually installed immediately after a package. The package scripts do not do this so you will have to install the bootscripts yourself. Run blfsa and choose section blfs and download for the SOURCES. This will create blfs.sh. To install a script do: ./blfs.sh <scriptname>  e.g. ./blfs.sh dbus or ./blfs.sh httpd. The scripts are installed with package-user name blfs-btscrpts.
 
@@ -29,7 +29,7 @@ blfsa is fairly large (over 4300 lines) so there's bound to be bits that don't w
 
 Thanks
 
-Release1.4 - minor changes to make script consistent with book cahnges.
+Release1.4 - minor changes to make script consistent with book changes.
 Release1.3 - added --without-gnome to some packages when building xfce and adjusted dependencies
 Release1.2 - changed wpa_supplicant to match the changes in the latest book version
 Release1.1 - added Xfce as an alternative to Gnome and set up a browser, Firefox or Seamonkey
