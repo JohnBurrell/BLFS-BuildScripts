@@ -1,5 +1,5 @@
 To use these scripts you must have installed LFS using my LFS-BuildScripts.
-Copy blfs03.sh, blfsa, blfsfiles.tar.xz and pkgorder.sh to $LFS. Edit blfs03.sh to add your group and username at the end. I have put a placeholder called john. Then run the script.
+Copy blfs03.sh, blfsfiles.tar.xz and pkgorder.sh to $LFS. Edit blfs03.sh to add your group and username at the end. I have put a placeholder called john. Then run the script.
 
 Run blfsa as root from your host. Make sure you have already chrooted into LFS from another screen. The script will install section by section, as per the blfs book. Not all sections are in the script at the moment, but the main ones are.
 
