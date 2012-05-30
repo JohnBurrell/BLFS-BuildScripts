@@ -1263,6 +1263,10 @@ else
             echo $line
             ((countg++))
         ;;
+        *HERE_DOC*) # apache writes a here doc
+              echo $line
+              ((countg++))
+        ;;
         sed*)
 # test if sed has continuation line
           case "$line" in
@@ -1277,7 +1281,7 @@ else
             ;;
           esac
         ;;
-        export*) # env variables being set up, e.g. llvm
+        export*) # catch any env variables being set up
           echo "$line"
           ((countg++))
         ;;
@@ -2338,12 +2342,16 @@ chgrp install /usr/lib/perl5/site_perl/5.14.2 # needs to be done early
 chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2
 chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux
 chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux
+chgrp install /lib/udev/rules.d # for lvm2
+chmod g+w,o+t /lib/udev/rules.d
 EOF
     ;;
     fontconfig) 
           cat >> $Output << "EOF"
 chgrp install /etc/fonts/conf.avail # for cantarell-fonts
 chmod g+w,o+t /etc/fonts/conf.avail
+chgrp install /etc/fonts/conf.d # for x7font
+chmod g+w,o+t /etc/fonts/conf.d
 EOF
     ;;
     p11-kit)
@@ -2364,11 +2372,11 @@ chgrp install /etc/ld.so.conf
 chmod 664 /etc/ld.so.conf
 EOF
     ;;
-    llvm) 
-          cat >> $Output << "EOF"
-sed -i "s/ABS_RUN_DIR\/lib/ABS_RUN_DIR\/lib\/llvm/" /usr/bin/llvm-config # for mesalib compile
-EOF
-    ;;
+#    llvm) 
+#          cat >> $Output << "EOF"
+#sed -i "s/ABS_RUN_DIR\/lib/ABS_RUN_DIR\/lib\/llvm/" /usr/bin/llvm-config # for mesalib compile
+#EOF
+#    ;;
     xml-parser)  #perl
           cat >> $Output << "EOF"
 chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto
@@ -2642,8 +2650,6 @@ chgrp install /usr/lib/alsa-lib
 chmod g+w,o+t /usr/lib/alsa-lib
 chgrp install /usr/share/alsa
 chmod g+w,o+t /usr/share/alsa
-chgrp install /lib/udev/rules.d
-chmod g+w,o+t /lib/udev/rules.d
 EOF
      ;;
      avahi)
@@ -3478,9 +3484,9 @@ EOF
    ;;
    llvm-)
     cat << "EOF"
-clangSrc=clang-3.0.tar.gz
+clangSrc=clang-3.1.src.tar.gz
 if [ ! -e $clangSrc ]; then
-wget http://llvm.org/releases/3.0/${clangSrc}
+wget http://llvm.org/releases/3.1/${clangSrc}
 fi
 cp ${sourcedir}/${SrcName}*.* .
 cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
@@ -3740,8 +3746,7 @@ case $pkgname in
     ;;
     wpa_supplicant)
        GetCommands \
-        | sed -e '/make BINDIR=/ i CFLAGS="-I/usr/include/libnl3/" \\' \
-              -e '/EDITMESSIDEDITME/d' \
+        | sed -e '/EDITMESSIDEDITME/d' \
               -e '/ip addr add/,/ip route add default/d' \
               -e '/wpa_supplicant -B/ i cat > /etc/rc.d/init.d/wireless_wlan0 << "EOF"' \
               -e '/dhcpcd/ a EOF' \
@@ -3885,7 +3890,8 @@ case $pkgname in
     apache)
        GetCommands \
         | sed -e '/groupadd/,/-s \/bin\/false/d' \
-              -e '/chown -v root:root/,/\/usr\/share\/doc\/httpd-2.4.1\/index.html/d' \
+              -e '/chown -v root:root/,/index.html/d' \
+              -e '/index.html/d' \
               -e '/make install-httpd/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -4172,6 +4178,12 @@ case $pkgname in
               -e 's/\# ac_add_options --with-system-nspr/ac_add_options --with-system-nspr/' \
               -e 's/\# ac_add_options --with-system-nss/ac_add_options --with-system-nss/' \
               -e '/make -C moz-build-dir install/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    llvm)
+       GetCommands \
+        | sed -e '/--enable-optimized/ i  --disable-docs \\' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
