@@ -331,7 +331,7 @@ return $RETURN_PARAM #requested book not present locally
 ChkLocalBookDetails () {
 if [ $BOOK_VERSION = "Current_Development" -o $BOOK_VERSION = "BOOK" ]; then
   # check the last svn date
-  returned_array=( `LastAccessSvn "$argument"` )
+  returned_array=( $(LastAccessSvn "$argument") )
   retval=$?
   if [ $retval -eq 0 ]; then # compare last svn date with today's date
     if [ ${returned_array[0]} -eq ${returned_array[1]} ]; then
@@ -656,7 +656,7 @@ fi
 DumpCommands () {
 REPODIR=${BLFS_BOOK_LOC_DIR}/$version
 target=$( echo $1 | awk '{print tolower($1)}')
-SVNINFO="`svn info $REPODIR | awk '{printf $0"|"}'`"
+SVNINFO="$(svn info $REPODIR | awk '{printf $0"|"}')"
 # Note, tagged | on the end so it can be used as a record separator later
 # e.g.
 # echo $SVNINFO | awk 'BEGIN{ RS = "|" }; {print $0}'
@@ -1943,7 +1943,7 @@ chmod 664 $BuildLog
 #
 cat > /etc/pkgusr/bash_profile << "BashProfile"
 export PATH=/usr/lib/pkgusr:/bin:/usr/bin:/opt/jdk/bin:/opt/ant/bin:/opt/qt/bin
-export PROMPT_COMMAND='PS1="package \u:"`pwd`"> "'
+export PROMPT_COMMAND='PS1="package \u:"$(pwd)"> "'
 cd
 EOF
 echo "PkgUserDir=${PKGUSERDIR}/${cursection}" >> $Output
@@ -1966,7 +1966,7 @@ cat >> $Output << "EOF"
 updatePkgUser_ () {
 cat > /etc/pkgusr/bash_profile << "BashProfile"
 export PATH=/usr/lib/pkgusr:/bin:/usr/bin
-export PROMPT_COMMAND='PS1="package \u:"`pwd`"> "'
+export PROMPT_COMMAND='PS1="package \u:"$(pwd)"> "'
 cd
 EOF
 echo "PkgUserDir=${PKGUSERDIR}/${cursection}" >> $Output
@@ -1987,28 +1987,7 @@ EOF
 delSrcFile () {
 echo "cd \$curdir
 cd ..
-count=0
-for f in *.tar.* # any tar files present?
-do
-  cdfile[\$count]=\${f%.tar.*}
-  ((count++))
-done
-for f in *.tgz
-do
-  cdfile[\$count]=\${f%.tgz}
-  ((count++))
-done
-for f in *.zip
-do
-cdfile[\$count]=\${f%.zip}
-((count++))
-done
-#
-for (( i=0; i<\$count; i++ )); do
-if [ \"\${cdfile[\$i]}\" != \"*\" ]; then
-  rm -rf \${cdfile[\$i]}
-fi
-done"
+rm -rf \$curdir"
 } # end of delSrcFile
 #
 Function () {
@@ -2137,9 +2116,6 @@ if [[ "$Section" == x || "$pkgname" == libdrm || "$pkgname" == freeglut ]]; then
 fi
 echo "SrcName=$srcname" >> $Output
 case $pkgname in
-  shadow)
-echo "sourcedir=${sourcedir}/security" >> $Output
-  ;;
   cups)
 echo "sourcedir=${sourcedir}/${Section}
 blfsfiles=${blfsBuildFiles}/${blfsfiles}" >> $Output
@@ -2183,7 +2159,7 @@ pathappend ${JAVA_HOME}/bin PATH
 # Copy jar files to, or create symlinks in this directory
 AUTO_CLASSPATH_DIR=/usr/lib/classpath
 pathprepend . CLASSPATH
-for dir in `find ${AUTO_CLASSPATH_DIR} -type d 2>/dev/null`; do
+for dir in $(find ${AUTO_CLASSPATH_DIR} -type d 2>/dev/null); do
     pathappend $dir CLASSPATH
 done
 
@@ -2201,7 +2177,7 @@ cd ..
 language="aspell6-en"
 dictionary="${language}-7.1-0.tar.bz2"
 wget ftp://ftp.gnu.org/gnu/aspell/dict/en/${dictionary}
-cd `tar vxf ${language}*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${language}*.tar.*z* | awk -F\/ 'END{print $1}')
 ./configure
 make
 make install
@@ -2235,8 +2211,8 @@ IPS
 EOF
 resolvelinks
 cat >> $Output << "EOF"
-if [ "`grep -q ^$PkgName\: /etc/passwd;echo $?`" != "0" ]; then
-  if [ "`grep -q ^install2\: /etc/group;echo $?`" != "0" ]; then
+if [ "$(grep -q ^$PkgName\: /etc/passwd;echo $?)" != 0 ]; then
+  if [ "$(grep -q ^install2\: /etc/group;echo $?)" != 0 ]; then
     numcharInstall install
     if [ $numchars -gt 2030 ]; then # limit of 2048. Create a new install group
       echo "install group has nearly reached the limit of 2048 chars"
@@ -2336,15 +2312,15 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /var/cache
 chmod g+w,o+t /var/cache
-chgrp install /usr/lib/perl5/5.14.2/i686-linux
-chmod g+w,o+t /usr/lib/perl5/5.14.2/i686-linux
-chgrp install /usr/lib/perl5/site_perl/5.14.2 # needs to be done early
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2
-chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux
 chgrp install /lib/udev/rules.d # for lvm2
 chmod g+w,o+t /lib/udev/rules.d
 EOF
+echo "chgrp install /usr/lib/perl5/${perlvers}/i686-linux
+chmod g+w,o+t /usr/lib/perl5/${perlvers}/i686-linux
+chgrp install /usr/lib/perl5/site_perl/${perlvers} # needs to be done early
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}
+chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux" >> $Output
     ;;
     fontconfig) 
           cat >> $Output << "EOF"
@@ -2372,18 +2348,11 @@ chgrp install /etc/ld.so.conf
 chmod 664 /etc/ld.so.conf
 EOF
     ;;
-#    llvm) 
-#          cat >> $Output << "EOF"
-#sed -i "s/ABS_RUN_DIR\/lib/ABS_RUN_DIR\/lib\/llvm/" /usr/bin/llvm-config # for mesalib compile
-#EOF
-#    ;;
     xml-parser)  #perl
-          cat >> $Output << "EOF"
-chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto
-chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto/XML
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto/XML
-EOF
+echo "chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto
+chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML" >> $Output
     ;;
     python)  #/usr/share/man
           cat >> $Output << "EOF"
@@ -2656,6 +2625,13 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/share/applications
 chmod g+w,o+t /usr/share/applications
+EOF
+     ;;
+     pulseaudio)
+           cat >> $Output << "EOF"
+groupadd -g 58 pulse
+useradd -c 'Pulseaudio User' -d /dev/null -g pulse \
+     -s /bin/false -u 58 pulse
 EOF
      ;;
      vlc)
@@ -3027,6 +3003,12 @@ chgrp install /usr/lib/nautilus
 chmod g+w,o+t /usr/lib/nautilus
 EOF
      ;;
+     file-roller)
+           cat >> $Output << "EOF"
+chgrp install /usr/lib/nautilus/extensions-3.0
+chmod g+w,o+t /usr/lib/nautilus/extensions-3.0
+EOF
+     ;;
      baobab)
            cat >> $Output << "EOF"
 chgrp install /usr/share/help/*
@@ -3085,8 +3067,25 @@ EOF
      ;;
      gnome-documents)
            cat >> $Output << "EOF"
-chgrp install /usr/share/gnome-shell
+chgrp install /usr/share/gnome-shell # if gnome-documents installed first
 chmod g+w,o+t /usr/share/gnome-shell
+EOF
+     ;;
+     gnome-shell)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/gnome-shell # if gnome-shell installed first
+chmod g+w,o+t /usr/share/gnome-shell
+EOF
+     ;;
+     gnome-session)
+           cat >> $Output << "EOF"
+cat > ~/.xinitrc << "EOL"
+dbus-launch --exit-with-session gnome-session
+EOL
+cat > /etc/profile.d/gnome.sh << "EOW"
+export XDG_DATA_DIRS=/usr/share
+export XDG_CONFIG_DIRS=/etc/xdg
+EOW
 EOF
      ;;
      gnome-games)
@@ -3095,6 +3094,46 @@ groupadd -fg 60 games
 useradd -c 'Games High Score Owner' -d /var/games \
       -g games -s /bin/false -u 60 games
 chown -v games:games /var/games
+chgrp install /usr/share/help/pl
+chmod g+w,o+t /usr/share/help/pl
+chgrp install /usr/share/help/ro
+chmod g+w,o+t /usr/share/help/ro
+chgrp install /usr/share/help/tr
+chmod g+w,o+t /usr/share/help/tr
+EOF
+     ;;
+     aisleriot)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/help/eu
+chmod g+w,o+t /usr/share/help/eu
+chgrp install /usr/share/help/en_GB
+chmod g+w,o+t /usr/share/help/en_GB
+chgrp install /usr/share/help/oc
+chmod g+w,o+t /usr/share/help/oc
+chgrp install /usr/share/help/zh_CN
+chmod g+w,o+t /usr/share/help/zh_CN
+EOF
+     ;;
+     gedit)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/help/ar
+chmod g+w,o+t /usr/share/help/ar
+chgrp install /usr/share/help/bg
+chmod g+w,o+t /usr/share/help/bg
+chgrp install /usr/share/help/cs
+chmod g+w,o+t /usr/share/help/cs
+chgrp install /usr/share/help/da
+chmod g+w,o+t /usr/share/help/da
+chgrp install /usr/share/help/ko
+chmod g+w,o+t /usr/share/help/ko
+chgrp install /usr/share/help/th
+chmod g+w,o+t /usr/share/help/th
+chgrp install /usr/share/help/uk
+chmod g+w,o+t /usr/share/help/uk
+chgrp install /usr/share/help/zh_HK
+chmod g+w,o+t /usr/share/help/zh_HK
+chgrp install /usr/share/help/zh_TW
+chmod g+w,o+t /usr/share/help/zh_TW
 EOF
      ;;
      nautilus-sendto)
@@ -3135,12 +3174,10 @@ chmod g+w,o+t /usr/include/xfce4
 EOF
      ;;
      extutls-dpnds)
-           cat >> $Output << "EOF"
-chgrp install /usr/lib/perl5/site_perl/5.14.2/ExtUtils
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/ExtUtils
-chgrp install /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto/ExtUtils
-chmod g+w,o+t /usr/lib/perl5/site_perl/5.14.2/i686-linux/auto/ExtUtils
-EOF
+echo "chgrp install /usr/lib/perl5/site_perl/${perlvers}/ExtUtils
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/ExtUtils
+chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/ExtUtils
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/ExtUtils" >> $Output
      ;;
      garcon)
            cat >> $Output << "EOF"
@@ -3220,6 +3257,10 @@ case $pkgname in
         doFirst="install -v -m700 -d /var/lib/sshd && chown -v root:sys /var/lib/sshd && groupadd -g 50 sshd && useradd -c 'sshd PrivSep' -d /var/lib/sshd -g sshd -s /bin/false -u 50 sshd"
         links=""
     ;;
+    glib)
+        doFirst=""
+        links="/usr/share/aclocal/{glib-2.0.m4,glib-gettext.m4,gsettings.m4}"
+    ;;
     net-tools)
         doFirst=""
         links="/bin/hostname"
@@ -3237,7 +3278,7 @@ case $pkgname in
         links=""
     ;;
     alsa-utils)
-        doFirst="chgrp install /usr/share/man && chmod g+w,o+t /usr/share/man"
+        doFirst="chgrp install /usr/share/man/* && chmod g+w,o+t /usr/share/man/*"
         links=""
     ;;
     faad2)
@@ -3252,7 +3293,7 @@ case $pkgname in
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    gnome-set-daemon|evol-data-server|gnome-panel|metacity|tpthymisscntrl|baobab|brasero|epiphany|gcalctool|gnome-contacts|eog|gnome-dictionary|gvfs|gnome-games)
+    gnome-set-daemon|evol-data-server|metacity|tpthymisscntrl|brasero|epiphany|gcalctool|gnome-contacts|eog|gnome-dictionary|gvfs|gnome-games)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
@@ -3260,7 +3301,7 @@ case $pkgname in
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    aisleriot|file-roller|evince|gnome-applets|evolution|ntwrk-mngr-applt|empathy|gnome-nettool)
+    aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /etc/gconf/gconf.xml.defaults/* /usr/share/icons/hicolor/icon-theme.cache"
     ;;
@@ -3268,7 +3309,7 @@ case $pkgname in
         doFirst=""
         links="/usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
     ;;
-    nautilus|gnome-bluetooth|tracker|gnome-documents)
+    nautilus|gnome-bluetooth|tracker|gnome-documents|baobab)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/share/icons/hicolor/icon-theme.cache"
     ;;
@@ -3361,13 +3402,20 @@ EOF
     tcl*) # there is -src and -html so specify src
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
-cd `tar vxf ${SrcName}*-src.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}*-src.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
     ;;
     Linux-PAM-|libusb-|freetype-|apr-) # do not want to untar the docs or libusb-compat
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
-cd `tar vxf ${SrcName}?.?.?.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}?.?.?.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+    ;;
+    shadow-) # delete original src
+    cat << "EOF"
+rm -rf shadow*.tar.*z*
+cp ${sourcedir}/${SrcName}*.* .
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
     ;;
     certdata.txt) # copy certdata.txt to pkguser dir
@@ -3378,7 +3426,7 @@ EOF
     LVM2.|sg3_utils-|zip|icu4c-|cdparanoia-|xterm-|sgml-common-) # a .tgz src file
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
-cd `tar vxf ${SrcName}*.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}*.*z* | awk -F\/ 'END{print $1}')
 EOF
     ;;
     x7proto|x7lib|x7app|x7font|x7driver)
@@ -3395,7 +3443,7 @@ EOF
    ;;
     udev-) # get udev-xxx, not the config version
     cat << "EOF"
-cd `tar vxf ${SrcName}???.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}???.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
     ghostscript-) # get the fonts too
@@ -3411,7 +3459,7 @@ do
   fontfile[$count]=$fl
   ((count++))
 done
-cd `tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
     x264-) # wget the source file
@@ -3420,13 +3468,13 @@ x264src="last_stable_x264.tar.bz2"
 if [ ! -e $x264src ]; then
 wget ftp://ftp.videolan.org/pub/x264/snapshots/${x264src}
 fi
-cd `tar vxf $x264src | awk -F\/ 'END{print $1}'`
+cd $(tar vxf $x264src | awk -F\/ 'END{print $1}')
 EOF
    ;;
    polkit-|dbus-|glib-|docbook-xsl-|poppler-) # not plokit-gnome, dbus-glib or glibmm
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
-cd `tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    Tie-IxHash-)
@@ -3435,14 +3483,14 @@ tieixhashSrc=${SrcName}1.22.tar.gz
 if [ ! -e $tieixhashSrc ]; then
 wget http://search.cpan.org/CPAN/authors/id/C/CH/CHORNY/${tieixhashSrc}
 fi
-cd `tar vxf $tieixhashSrc | awk -F\/ 'END{print $1}'`
+cd $(tar vxf $tieixhashSrc | awk -F\/ 'END{print $1}')
 EOF
    ;;
    cups-)
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
 cp ${blfsfiles}/cups-responses .
-cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
     php-) # wget the docs (single html)
@@ -3452,7 +3500,7 @@ phpManual=php_manual_en.html.gz
 if [ ! -e $phpManual ]; then
 wget -O $phpManual http://us.php.net/get/${phpManual}/from/this/mirror
 fi
-cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    bluez-)
@@ -3461,7 +3509,7 @@ bluezSrc=bluez-4.99.tar.gz
 if [ ! -e $bluezSrc ]; then
 wget http://www.kernel.org/pub/linux/bluetooth/${bluezSrc}
 fi
-cd `tar vxf $bluezSrc | awk -F\/ 'END{print $1}'`
+cd $(tar vxf $bluezSrc | awk -F\/ 'END{print $1}')
 EOF
    ;;
    gst-python-)
@@ -3470,7 +3518,7 @@ gstpythonSrc=gst-python-0.10.22.tar.bz2
 if [ ! -e $gstpythonSrc ]; then
 wget http://gstreamer.freedesktop.org/src/gst-python/${gstpythonSrc}
 fi
-cd `tar vxf $gstpythonSrc | awk -F\/ 'END{print $1}'`
+cd $(tar vxf $gstpythonSrc | awk -F\/ 'END{print $1}')
 EOF
    ;;
    libcdio-)
@@ -3479,7 +3527,7 @@ libcdioSrc=libcdio-0.83.tar.bz2
 if [ ! -e $libcdioSrc ]; then
 wget http://ftp.gnu.org/gnu/libcdio/${libcdioSrc}
 fi
-cd `tar vxf $libcdioSrc | awk -F\/ 'END{print $1}'`
+cd $(tar vxf $libcdioSrc | awk -F\/ 'END{print $1}')
 EOF
    ;;
    llvm-)
@@ -3489,13 +3537,13 @@ if [ ! -e $clangSrc ]; then
 wget http://llvm.org/releases/3.1/${clangSrc}
 fi
 cp ${sourcedir}/${SrcName}*.* .
-cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    *) # tar.xz,gz,bz2,tgz
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
-cd `tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}'`
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
 esac
@@ -3670,7 +3718,7 @@ case $pkgname in
     iptables)
        GetCommands \
         | sed -e '/make install-iptables/d' \
-              -e "/make install/ i sed -i '892,893d' iptables\/Makefile" \
+              -e "/configure_commands()/ i sed -i -e '\/sbin\\\/ldconfig/d' \\\\\n    -e '/\${INSTALL} -dm0755 \"\${DESTDIR}\${bindir}\";/'d iptables\/Makefile.in" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -3866,11 +3914,9 @@ case $pkgname in
     ;;
     mesalib)
         GetCommands \
-         | sed -e '/cp -rv docs/ a if [ "$XORG_PREFIX" != "/usr" ]; then' \
+         | sed -e "/make install/ i sed -i 's/\$(INSTALL) -v -d -m755 \$(DESTDIR)\$(INSTALL_DIR)\\\/bin/test ! -z \$(DESTDIR)\$(INSTALL_DIR)\\\/bin || \$(INSTALL) -v -d -m755 \$(DESTDIR)\$(INSTALL_DIR)\\\/bin/' xdemos\/Makefile" \
+               -e '/cp -rv docs/ a if [ "$XORG_PREFIX" != "/usr" ]; then' \
                -e '/HEADER \/usr\/include/{N;s/HEADER \/usr\/include\ndone/HEADER \/usr\/include\ndone\nfi/}' \
-               -e '/nouveau/d' \
-               -e 's/--enable-xa \\/--enable-xa/' \
-               -e "/make install/ i sed -i '15d' xdemos\/Makefile" \
                -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -3914,9 +3960,7 @@ case $pkgname in
     alsa-utils)
        GetCommands \
         | sed -e '/make install-alsa/d' \
-              -e 's[\*\*EDITME<username>EDITME\*\*['john'[' \
-              -e 's/alsactl/\/usr\/sbin\/alsactl/' \
-              -e 's/usermod/\/usr\/sbin\/usermod/' \
+              -e '/touch \/var\/lib\/alsa\/asound.state/,/usermod/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -3979,6 +4023,12 @@ case $pkgname in
           | sed -e 's/\(.*\)&&$/\1/' \
           >> $Output
        fi
+    ;;
+    pulseaudio)
+       GetCommands \
+        | sed -e '/groupadd/,/-s \/bin\/false/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
     ;;
     opal)
        GetCommands \
@@ -4065,7 +4115,7 @@ case $pkgname in
     ;;
     networkmanager)
        GetCommands \
-        | sed -e '/--with-crypto/ i    --enable-ppp=no \\' \
+        | sed -e "/--disable-ppp/ a     sed -i 's/-Werror//' src/ppp-manager/Makefile" \
               -e '/make install-networkmanager/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -4144,6 +4194,12 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    evolution)
+       GetCommands \
+        | sed -e 's/disable-contact-maps/with-clutter/' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     gimp)
        GetCommands \
         | awk '/make install/{n+=1}{if (n==2){sub("make install","",$0)};print }' \
@@ -4165,7 +4221,7 @@ case $pkgname in
               -e 's/\# ac_add_options --with-system-libvpx/ac_add_options --with-system-libvpx/' \
               -e 's/\# ac_add_options --with-system-nspr/ac_add_options --with-system-nspr/' \
               -e 's/\# ac_add_options --with-system-nss/ac_add_options --with-system-nss/' \
-              -e '/chown -R -v root:root \/usr\/lib\/firefox-12.0/,/ln -sv ..\/mozilla\/plugins \/usr\/lib\/firefox-12.0/d' \
+              -e '/chown -R -v root:root \/usr\/lib\/firefox-'"$ffoxvers"'/,/ln -sv ..\/mozilla\/plugins \/usr\/lib\/firefox-'"$ffoxvers"'/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4480,12 +4536,23 @@ do
       Output=$LFS/${SINGLE_PACKAGE}.sh
       case $pkgname in
         coreutils|udev|shadow) # these are core LFS
-            cursection=core
-            updatePkgUser
-            Function
+           cursection=core
+           updatePkgUser
+           Function
+        ;;
+        popt|pkg-config)
+           pswfile=${LFS}/etc/passwd
+           if [ "$( grep -q ^$pkgname\: $pswfile; echo $? )" = "0" ]; then
+             echo "$pkgname found in /etc/passwd - skipping"
+             install -d ${LFS}${PKGUSERDIR}/${Section}/${pkgname}
+             touch ${LFS}${PKGUSERDIR}/${Section}/${pkgname}/.${pkgname}
+             continue
+           else
+             Function
+           fi
         ;;
         *)
-            Function
+           Function
         ;;
       esac
       break
@@ -4516,6 +4583,17 @@ do
           updatePkgUser
           Function
        ;;
+       popt|pkg-config)
+          pswfile=${LFS}/etc/passwd
+          if [ "$( grep -q ^$pkgname\: $pswfile; echo $? )" = "0" ]; then
+            echo "$pkgname found in /etc/passwd - skipping"
+            install -d ${LFS}${PKGUSERDIR}/${Section}/${pkgname}
+            touch ${LFS}${PKGUSERDIR}/${Section}/${pkgname}/.${pkgname}
+            continue
+          else
+            Function
+          fi
+       ;;
        *)
           Function
        ;;
@@ -4543,10 +4621,35 @@ sed -e '/make check/d' \
 #
 GetudevVersion () {
 udevloc="${LFS}${PKGUSERDIR}/core/udev"
-fnd=$( ls -l $udevloc | grep udev-[0-9]*.tar.*z* | awk '{print $9}' )
+fnd=$( ls -l $udevloc | grep udev-[0-9]*.tar.*z* | awk '{print $NF}' )
 fileExt="${fnd#*-}"
 udevvers="${fileExt%.tar*}"
 } # end GetudevVersion
+#
+GetPerlVersion () {
+perlloc="${LFS}${PKGUSERDIR}/core/perl"
+pnd=$( ls -l $perlloc | grep perl-[0-9].*.tar.*z* | awk '{print $NF}' )
+fleExt="${pnd#*-}"
+perlvers="${fleExt%.tar*}"
+} # end GetPerlVersion
+#
+GetFirefoxVersion () {
+firefoxloc="${LFS}${sourcedir}/browser"
+if [ -d $firefoxloc ]; then
+  : # okay, so continue
+else
+  firefoxloc="${LFS}${PKGUSERDIR}/browser/firefox"
+  if [ -d $firefoxloc ]; then
+    : # okay, so continue
+  else
+    return $RETURN_PARAM
+  fi
+fi
+ffnd=$( ls -l $firefoxloc | grep firefox-[0-9].*.tar.*z* | awk '{print $NF}' )
+ffoxExt="${ffnd#*-}"
+ffoxvers="${ffoxExt%.source*}"
+return 0
+} # end GetFirefoxVersion
 #
 # ***main program***  - call the functions
 #
@@ -4562,7 +4665,26 @@ if [[ "$SINGLE_PACKAGE" == no ]]; then
   if [[ "$SECTION" = x || "$SECTION" = ALL ]]; then # define x version
     xversion="7.6-2"
   elif [[ "$SECTION" = sysUtils || "$SECTION" = ALL ]]; then # get udev version
-    GetudevVersion
+    if [ -z $udevvers ]; then # null, so fill
+      GetudevVersion
+    fi
+  elif [[ "$SECTION" = libraries || "$SECTION" = programming || "$SECTION" = ALL ]]; then #perl vers
+    if [ -z $perlvers ]; then # null, so fill
+      GetPerlVersion
+    fi
+  elif [[ "$SECTION" = browser || "$SECTION" = ALL ]]; then
+    if [ "$BROWSER" = firefox ]; then
+      if [ -z $ffoxvers ]; then # null, so fill
+        GetFirefoxVersion
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then
+          echo "Requested Firefox version but cannot find source location"
+          echo "Modify this code to include proper source location"
+          echo "Exiting now"
+          exit 1
+        fi
+      fi  
+    fi
   fi
 else
   single_package=true
@@ -4575,6 +4697,18 @@ else
   else
     echo "Package $SINGLE_PACKAGE found in section $SECTION"
     echo "Will produce a script called $SINGLE_PACKAGE.sh for this single package"
+    if [ "$SINGLE_PACKAGE" = firefox ]; then # get firefox version
+      if [ -z $ffoxvers ]; then # null, so fill
+        GetFirefoxVersion
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then
+          echo "Requested Firefox version but cannot find source location"
+          echo "Modify this code to include proper source location"
+          echo "Exiting now"
+          exit 1
+        fi
+      fi
+    fi
   fi
 fi
 if [ $BOOK = "svn" ]; then
@@ -4628,35 +4762,47 @@ fi
 SetupSections # create the array SectionsAll. Contains the sections to build
 for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the sources
   Section=${SectionsALL[$ij]}
-  rtrnPkg=""
-  rtrnSrc=""
-  rtrnCmd=""
-  altFileNames $Section # get the 3 alternative names for the packages in this section
-  return_val=$?
-  if [ $return_val -eq $RETURN_PARAM ]; then
-    echo "no ${Section}-files  file found. It should be in $BLFSBUILDFILES"
-    echo "Place it there in order to continue. Exiting now"
-    exit 1
-  fi
-  if [ "$SOURCES" = download ]; then # download the sources for this section
-    CleanSourceDir $Section # clean the sources file if not empty
-    GetListFile #get wget-list
-    GetSources $Section rtrnSrc[@] # download the sources in the wget-list file
-    ChkEmptySrcFiles $Section #check for failed downloads
-    return_val=$?
-    if [ $return_val -eq $RETURN_PARAM ]; then
-      echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
-      echo "You will have to download the required sources to this dir."
-      echo "Continuing to make the scripts for section $Section"
-    fi
-  else # sources are local
-    ChkEmptySrcFiles $Section # check for any empty files
-    return_val=$?
-    if [ $return_val -eq $RETURN_PARAM ]; then
-      echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
-      echo "You will have to download the required sources to this dir."
-      echo "Continuing to make the scripts for section $Section"
+  skipSection=false  
+  if [ "$GNOME_OR_XFCE" = gnome ]; then # skip section xfce
+    if [ "$Section" = xfce ]; then skipSection=true; fi
+  else # skip all the gnome sections
+    if [[ "$Section" == gnomePlatform || "$Section" == gnomeDesktop || "$Section" == gnomeUtils || "$Section" == gnomeAddUtils || "$Section" == gnomeAddLibs ]]; then
+    skipSection=true
     fi
   fi
-  Start $Section rtrnPkg[@] rtrnSrc[@] rtrnCmd[@] # build the script for this section
+  if $skipSection; then
+    :
+  else # build the section
+    rtrnPkg=""
+    rtrnSrc=""
+    rtrnCmd=""
+    altFileNames $Section # get the 3 alternative names for the packages in this section
+    return_val=$?
+    if [ $return_val -eq $RETURN_PARAM ]; then
+      echo "no ${Section}-files  file found. It should be in $BLFSBUILDFILES"
+      echo "Place it there in order to continue. Exiting now"
+      exit 1
+    fi
+    if [ "$SOURCES" = download ]; then # download the sources for this section
+      CleanSourceDir $Section # clean the sources file if not empty
+      GetListFile #get wget-list
+      GetSources $Section rtrnSrc[@] # download the sources in the wget-list file
+      ChkEmptySrcFiles $Section #check for failed downloads
+      return_val=$?
+      if [ $return_val -eq $RETURN_PARAM ]; then
+        echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
+        echo "You will have to download the required sources to this dir."
+        echo "Continuing to make the scripts for section $Section"
+      fi
+    else # sources are local
+      ChkEmptySrcFiles $Section # check for any empty files
+      return_val=$?
+      if [ $return_val -eq $RETURN_PARAM ]; then
+        echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
+        echo "You will have to download the required sources to this dir."
+        echo "Continuing to make the scripts for section $Section"
+      fi
+    fi
+    Start $Section rtrnPkg[@] rtrnSrc[@] rtrnCmd[@] # build the script for this section
+  fi
 done
