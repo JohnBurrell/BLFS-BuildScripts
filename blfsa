@@ -738,7 +738,14 @@ do
     configure_commands*)
       combine[countc++]=${buildWrap[countbl++]}
       combine[countc++]=${buildWrap[countbl++]} # the {: line
-      until [[ "${commands[countg]}" == make* || "${commands[countg]}" == *install* ]]; do
+      if $isPython; then
+        while [[ "${commands[countg]}" == *\\ ]]; do
+          combine[countc++]="  ${commands[countg++]}"
+        done
+        combine[countc++]="  ${commands[countg++]}" # end of the continuation lines
+        inc=true
+      fi
+      until [[ "${commands[countg]}" == make* || "${commands[countg]}" == *install* || "${commands[countg]}" == error_count* ]]; do
         case "${commands[countg]}" in
          *\\)
              storit[cont++]="${commands[countg++]}"
@@ -1110,18 +1117,15 @@ case $pkgname in
                         bcom[ic++]=$tline
                   ;;
                   *configure*)
-                        if ! $conffound; then # first config found
+                        if ! $conffound; then # first config found, don't write
                           conffound=true
-                          bcom[ic++]=$tline
-                        else # 2nd config found - don't write
+                        else # 2nd config found so write
                           conffound=false
+                          bcom[ic++]=$tline
                         fi
                   ;;
-                  *install)
-                        bcom[ic++]=$tline
-                  ;;
                   *)
-                        if $conffound; then bcom[ic++]=$tline; fi
+                        if ! $conffound; then bcom[ic++]=$tline; fi
                   ;;
                esac
              done
@@ -1228,6 +1232,7 @@ else
   wpa_sup=false
   mozconfigfnd=false
   isSed=false
+  isPython=false
   for line in "${commandScripts[@]}"
   do
     if $mozconfigfnd || $wpa_sup; then # never both true-in different sections
@@ -1253,12 +1258,12 @@ else
             echo $line
             ((countg++))
         ;;
-        'cat > mozconfig << "EOF"') # firefox writes mozconfig
+        'cat > mozconfig << EOF') # firefox writes mozconfig
             mozconfigfnd=true
             echo $line
             ((countg++))
         ;;
-        'cat > .mozconfig << "EOF"') # seamonkey writes .mozconfig
+        'cat > mozconfig << "EOF"') # seamonkey writes mozconfig
             mozconfigfnd=true
             echo $line
             ((countg++))
@@ -1284,6 +1289,10 @@ else
         export*) # catch any env variables being set up
           echo "$line"
           ((countg++))
+        ;;
+        "python setup.py configure"*) # python configure in wicd
+          isPython=true
+          break
         ;;
         *configure*|*Configure*|*bootstrap*|*config*|*autogen.sh*|cmake*) # boost is bootstrap, openssl is config mysql is cmake
           if $isSed; then # write out the sed lines
@@ -2181,6 +2190,8 @@ cd $(tar vxf ${language}*.tar.*z* | awk -F\/ 'END{print $1}')
 ./configure
 make
 make install
+cd ..
+rm -rf ${language}-7.1-0.
 #end install dict
 EOF
   ;;
@@ -2768,6 +2779,12 @@ chgrp install /usr/share/vala
 chmod g+w,o+t /usr/share/vala
 EOF
      ;;
+     php)
+           cat >> $Output << "EOF"
+chgrp install /usr/lib/php/extensions/no-debug-zts-20090626
+chmod g+w,o+t /usr/lib/php/extensions/no-debug-zts-20090626
+EOF
+     ;;
      mysql)
            cat >> $Output << "EOF"
 echo "The mysql root password is currently blank"
@@ -3021,6 +3038,8 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/lib/nautilus/extensions-3.0
 chmod g+w,o+t /usr/lib/nautilus/extensions-3.0
+chgrp install /usr/share/mime/packages
+chmod g+w,o+t /usr/share/mime/packages
 EOF
      ;;
      gcalctool)
@@ -3140,6 +3159,12 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/lib/nautilus-sendto/plugins
 chmod g+w,o+t /usr/lib/nautilus-sendto/plugins
+EOF
+     ;;
+     glade)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/glade/catalogs
+chmod g+w,o+t /usr/share/glade/catalogs
 EOF
      ;;
      gnome-bluetooth)
@@ -3289,7 +3314,11 @@ case $pkgname in
         doFirst="useradd -c 'Print Service User' -d /dev/null -g lp -s /bin/false -u 9 lp && chgrp install /var/spool && chmod g+w,o+t /var/spool"
         links=""
     ;;
-    gtkplus3|gst-plgns-bad|at-spi2-atk|telepathy-logr|dconf|libgnomekbd|gset-dsktp-schms|caribou|gcr|gnome-keyring|gnome-session|yelp|mutter|gnome-shell)
+    gcr)
+        doFirst="if [ -e /usr/share/mime/packages/gcr-crypto-types.xml ]; then rm /usr/share/mime/packages/gcr-crypto-types.xml; fi"
+        links="/usr/share/glib-2.0/schemas/gschemas.compiled"
+    ;;
+    gtkplus3|gst-plgns-bad|at-spi2-atk|telepathy-logr|dconf|libgnomekbd|gset-dsktp-schms|caribou|gnome-keyring|gnome-session|yelp|mutter|gnome-shell)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
@@ -3301,7 +3330,7 @@ case $pkgname in
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool)
+    aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool|libpeas)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /etc/gconf/gconf.xml.defaults/* /usr/share/icons/hicolor/icon-theme.cache"
     ;;
@@ -3556,7 +3585,7 @@ EOF
 } # end unpack
 #
 WriteScript () {
-# remove docs statements and && and other stuff
+# remove docs statements and && and some other stuff
 case $pkgname in
     libusb|cpio|gnupg)
        GetCommands \
@@ -3661,13 +3690,13 @@ case $pkgname in
        GetCommands \
         | sed -e 's/INSTALL_USER=root/INSTALL_USER=attr/' \
               -e 's/INSTALL_GROUP=root/INSTALL_GROUP=attr/' \
-              -e "/make install/ i sed -i '32d' attr\/Makefile" \
-              -e "/make install/ i sed -i '33d' getfattr\/Makefile" \
-              -e "/make install/ i sed -i '33d' setfattr\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man1\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man2\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man3\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man5\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_BIN_DIR)/d' attr\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_BIN_DIR)/d' getfattr\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_BIN_DIR)/d' setfattr\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man1\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man2\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man3\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man5\/Makefile" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -3675,42 +3704,43 @@ case $pkgname in
        GetCommands \
         | sed -e 's/INSTALL_USER=root/INSTALL_USER=acl/' \
               -e 's/INSTALL_GROUP=root/INSTALL_GROUP=acl/' \
-              -e "/make install/ i sed -i '34d' getfacl\/Makefile" \
-              -e "/make install/ i sed -i '34d' setfacl\/Makefile" \
-              -e "/make install/ i sed -i '33d' chacl\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man1\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man3\/Makefile" \
-              -e "/make install/ i sed -i '33d' man\/man5\/Makefile" \
-              -e "/make install/ i sed -i '34,35d' include\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_BIN_DIR)/d' getfacl\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_BIN_DIR)/d' setfacl\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_BIN_DIR)/d' chacl\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man1\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man3\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(MAN_DEST)/d' man\/man5\/Makefile" \
+              -e "/make install/ i sed -i '0,/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_INC_DIR)/{//d;}' include\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL) -m 755 -d \\\\\$(PKG_INC_DIR)\\\/sys/d' include\/Makefile" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     cups)
        GetCommands \
-        | sed -e "/make install/ i sed -i '68d' desktop\/Makefile" \
-              -e "/make install/ i sed -i '74d' locale\/Makefile" \
-              -e "/make install/ i sed -i '76d' locale\/Makefile" \
-              -e "/make install/ i sed -i '81d' conf\/Makefile" \
-              -e "/make install/ i sed -i '131d' man\/Makefile" \
-              -e "/make install/ i sed -i '135d' man\/Makefile" \
-              -e "/make install/ i sed -i '139d' man\/Makefile" \
-              -e "/make install/ i sed -i '143d' man\/Makefile" \
-              -e "/make install/ i sed -i '170d' Makefile" \
-              -e "/make install/ i sed -i '248d' cups\/Makefile" \
-              -e "/make install/ i sed -i '151d' filter\/Makefile" \
-              -e "/make install/ i sed -i '144d' cgi-bin\/Makefile" \
-              -e "/make install/ i sed -i '152d' driver\/Makefile" \
-              -e "/make install/ i sed -i '168d' ppdc\/Makefile" \
-              -e "/make install/ i sed -i '254d' scheduler\/Makefile" \
-              -e "/make install/ i sed -i '105d' test\/Makefile" \
-              -e "/make install/ i sed -i '80d' berkeley\/Makefile" \
-              -e "/make install/ i sed -i '84d' berkeley\/Makefile" \
-              -e "/make install/ i sed -i '140d' ppdc\/Makefile" \
-              -e "/make install/ i sed -i '215d' scheduler\/Makefile" \
-              -e "/make install/ i sed -i '83d' systemv\/Makefile" \
-              -e "/make install/ i sed -i '100d' systemv\/Makefile" \
-              -e '/useradd/d' \
+        | sed -e '/useradd/d' \
               -e '/pushd/,/make install-cups/d' \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BUILDROOT)\\\\\$(DBUSDIR)\\\/system.d; \\\/d' desktop\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LOCALEDIR)/d' locale\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(DATADIR)\\\/mime/d' conf\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man1/d' man\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man5/d' man\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man7/d' man\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(AMANDIR)\\\/man\\\\\$(MAN8DIR)/d' man\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BINDIR)/d' Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LIBDIR)/d' cups\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LIBDIR)/d' filter\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LIBDIR)/d' cgi-bin\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LIBDIR)/d' driver\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LIBDIR)/d' ppdc\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LIBDIR)/d' scheduler\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BINDIR)/d' test\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BINDIR)/d' berkeley\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(SBINDIR)/d' berkeley\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) \\\\\$(BINDIR)/d' ppdc\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(SBINDIR)/d' scheduler\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(SBINDIR)/d' systemv\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BINDIR)/d' systemv\/Makefile" \
+              -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) \\\\\$(PHPDIR)/d' scripting\/php\/Makefile" \
               -e 's/make install/make install < ..\/cups-responses/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -3798,6 +3828,12 @@ case $pkgname in
               -e '/ip addr add/,/ip route add default/d' \
               -e '/wpa_supplicant -B/ i cat > /etc/rc.d/init.d/wireless_wlan0 << "EOF"' \
               -e '/dhcpcd/ a EOF' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    wicd)
+       GetCommands \
+        | sed -e '/make install-wicd/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4221,7 +4257,7 @@ case $pkgname in
               -e 's/\# ac_add_options --with-system-libvpx/ac_add_options --with-system-libvpx/' \
               -e 's/\# ac_add_options --with-system-nspr/ac_add_options --with-system-nspr/' \
               -e 's/\# ac_add_options --with-system-nss/ac_add_options --with-system-nss/' \
-              -e '/chown -R -v root:root \/usr\/lib\/firefox-'"$ffoxvers"'/,/ln -sv ..\/mozilla\/plugins \/usr\/lib\/firefox-'"$ffoxvers"'/d' \
+              -e '/chown -R -v root:root \/usr\/lib\/firefox-'"$ffoxvers"'/,/ln -sfv ..\/mozilla\/plugins \/usr\/lib\/firefox-'"$ffoxvers"'/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4672,19 +4708,6 @@ if [[ "$SINGLE_PACKAGE" == no ]]; then
     if [ -z $perlvers ]; then # null, so fill
       GetPerlVersion
     fi
-  elif [[ "$SECTION" = browser || "$SECTION" = ALL ]]; then
-    if [ "$BROWSER" = firefox ]; then
-      if [ -z $ffoxvers ]; then # null, so fill
-        GetFirefoxVersion
-        ret_val=$?
-        if [ $ret_val -eq $RETURN_PARAM ]; then
-          echo "Requested Firefox version but cannot find source location"
-          echo "Modify this code to include proper source location"
-          echo "Exiting now"
-          exit 1
-        fi
-      fi  
-    fi
   fi
 else
   single_package=true
@@ -4697,18 +4720,6 @@ else
   else
     echo "Package $SINGLE_PACKAGE found in section $SECTION"
     echo "Will produce a script called $SINGLE_PACKAGE.sh for this single package"
-    if [ "$SINGLE_PACKAGE" = firefox ]; then # get firefox version
-      if [ -z $ffoxvers ]; then # null, so fill
-        GetFirefoxVersion
-        ret_val=$?
-        if [ $ret_val -eq $RETURN_PARAM ]; then
-          echo "Requested Firefox version but cannot find source location"
-          echo "Modify this code to include proper source location"
-          echo "Exiting now"
-          exit 1
-        fi
-      fi
-    fi
   fi
 fi
 if [ $BOOK = "svn" ]; then
@@ -4801,6 +4812,20 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
         echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
         echo "You will have to download the required sources to this dir."
         echo "Continuing to make the scripts for section $Section"
+      fi
+    fi
+    if [ "$Section" = browser ]; then
+      if [ "$BROWSER" = firefox ]; then
+        if [ -z $ffoxvers ]; then # null, so fill
+          GetFirefoxVersion
+          ret_val=$?
+          if [ $ret_val -eq $RETURN_PARAM ]; then
+            echo "Requested Firefox version but cannot find source location"
+            echo "Modify this code to include proper source location"
+            echo "Exiting now"
+            exit 1
+          fi     
+        fi     
       fi
     fi
     Start $Section rtrnPkg[@] rtrnSrc[@] rtrnCmd[@] # build the script for this section
