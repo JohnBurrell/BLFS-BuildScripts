@@ -35,6 +35,7 @@ SOURCES=$SOURCES
 BOOK=$BOOK
 SECTION=$SECTION
 XORG_PREFIX=$XORG_PREFIX
+XVERSION=$XVERSION
 GNOME_OR_XFCE=$GNOME_OR_XFCE
 BROWSER=$BROWSER
 SINGLE_PACKAGE=$SINGLE_PACKAGE
@@ -57,6 +58,9 @@ else
   if [ -z $XORG_PREFIX ]; then
     XORG_PREFIX="/usr"
   fi
+  if [ -z $XVERSION ]; then
+    XVERSION="7.7-1"
+  fi
   if [ -z $GNOME_OR_XFCE ]; then
     GNOME_OR_XFCE="gnome"
   fi
@@ -67,16 +71,17 @@ else
     SINGLE_PACKAGE="no"
   fi
 # store the values in the new config file
-  echo "BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO" | tee -a $cfg
+  echo "BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO" | tee $cfg
   echo "SVN_URL=svn://svn.linuxfromscratch.org/$REPO/" | tee -a $cfg
-  echo "BOOK_VERSION=blank" | tee -a $cfg
+  echo "BOOK_VERSION=$BOOK_VERSION" | tee -a $cfg
   echo "SOURCES=$SOURCES" | tee -a $cfg
   echo "BOOK=$BOOK" | tee -a $cfg
   echo "SECTION=$SECTION" | tee -a $cfg
   echo "XORG_PREFIX=$XORG_PREFIX" | tee -a $cfg
+  echo "XVERSION=$XVERSION" | tee -a $cfg
   echo "GNOME_OR_XFCE=$GNOME_OR_XFCE" | tee -a $cfg
   echo "BROWSER=$BROWSER" | tee -a $cfg
-  echo "SINGLE_PACKAGE"="no" | tee -a $cfg
+  echo "SINGLE_PACKAGE=$SINGLE_PACKAGE" | tee -a $cfg
 fi
 #
 # functions
@@ -119,6 +124,8 @@ _edit () {
      display="options are blfs, security, libraries, genUtils, sysUtils, programming, networks, server, x, xlibs, gnomePlatform, gnomeDesktop, gnomeUtils, gnomeAddLibs, gnomeAddUtils, xfce, browser, xSoftware, multimedia, pst, or ALL"
    elif [ $tochange = "XORG_PREFIX" ]; then
      display="Choose the installation prefix for Xorg"
+   elif [ $tochange = "XVERSION" ]; then
+     display="Enter the current X version in the BLFS book"
    elif [ $tochange = "GNOME_OR_XFCE" ]; then
      display="type gnome or xfce - you can install one or the other, not both"
    elif [ $tochange = "BROWSER" ]; then
@@ -739,11 +746,18 @@ do
       combine[countc++]=${buildWrap[countbl++]}
       combine[countc++]=${buildWrap[countbl++]} # the {: line
       if $isPython; then
-        while [[ "${commands[countg]}" == *\\ ]]; do
-          combine[countc++]="  ${commands[countg++]}"
-        done
-        combine[countc++]="  ${commands[countg++]}" # end of the continuation lines
-        inc=true
+        case "${commands[countg]}" in
+          *\\)
+             while [[ "${commands[countg]}" == *\\ ]]; do
+               combine[countc++]="  ${commands[countg++]}"
+             done
+             combine[countc++]="  ${commands[countg++]}" # end of the continuation lines
+             inc=true
+          ;;
+          *)
+             :
+          ;;
+        esac
       fi
       until [[ "${commands[countg]}" == make* || "${commands[countg]}" == *install* || "${commands[countg]}" == error_count* ]]; do
         case "${commands[countg]}" in
@@ -1034,8 +1048,8 @@ case $pkgname in
              done
              rtrnCom=(${bcom[@]})
              return 0
-      ;;
-      xml-parser|tie-ixhash|xml-simple|extutls-dpnds|extutls-pkgcnfg|perl-glib|uri)
+     ;;
+     xml-parser|tie-ixhash|xml-simple|extutls-dpnds|extutls-pkgcnfg|perl-glib|uri|archive-zip)
              ic=0
              found=false
              for tline in ${acom[@]}
@@ -1047,7 +1061,7 @@ case $pkgname in
                            bcom[ic++]=$tline
                          fi
                   ;;
-                   *install*)
+                  *install*)
                          if $found; then
                            bcom[ic++]=$tline
                            rtrnCom=(${bcom[@]})
@@ -1063,7 +1077,7 @@ case $pkgname in
              done
              return $RETURN_PARAM #install command not found
      ;;
-      x7proto|x7lib|x7app|x7font|x7driver)
+     x7proto|x7lib|x7app|x7font|x7driver)
              ic=0
              found=false
              for tline in ${acom[@]}
@@ -1083,7 +1097,31 @@ case $pkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
-      aspell)
+     xf86-nouveau|xf86-wacom) # commands are the same so need one set only
+             ic=0
+             found=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  *configure*)
+                         if ! $found; then
+                           found=true
+                           bcom[ic++]=$tline
+                         else # second configure, ignore rest of commands
+                           found=false
+                         fi
+                  ;;
+                  *)
+                         if $found; then # write until next configure
+                           bcom[ic++]=$tline
+                         fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     aspell)
              ic=0
              found=false
              for tline in ${acom[@]}
@@ -1107,7 +1145,7 @@ case $pkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
-      webkitgtk)
+     webkitgtk)
              ic=0
              conffound=false
              for tline in ${acom[@]}
@@ -1132,7 +1170,7 @@ case $pkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
-      linux-pam)
+     linux-pam)
              ic=0
              instfound=false
              for tline in ${acom[@]}
@@ -1156,7 +1194,7 @@ case $pkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
-       db)
+     db)
              ic=0
              cdfound=false
              for tline in ${acom[@]}
@@ -1180,7 +1218,7 @@ case $pkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
-       docbook-xsl)
+     docbook-xsl)
              ic=0
              catcount=0 # need to find 4 xmlcatalog commands then ignore the rest
              xmlcatfound=false
@@ -1225,7 +1263,7 @@ else
   getComms
   commandScripts=(${rtrnCom[@]})
   numclines=${#commandScripts[@]} # # of commands
-#
+# 
 # output commands until first configure found
   countg=0 # # of commands wriiten out
   contline=0
@@ -1258,12 +1296,7 @@ else
             echo $line
             ((countg++))
         ;;
-        'cat > mozconfig << EOF') # firefox writes mozconfig
-            mozconfigfnd=true
-            echo $line
-            ((countg++))
-        ;;
-        'cat > mozconfig << "EOF"') # seamonkey writes mozconfig
+        "cat > mozconfig <<"*) # firefox, seamonkey write mozconfig
             mozconfigfnd=true
             echo $line
             ((countg++))
@@ -1289,6 +1322,9 @@ else
         export*) # catch any env variables being set up
           echo "$line"
           ((countg++))
+        ;;
+        "perl Makefile.PL"*) # a perl module
+          break
         ;;
         "python setup.py configure"*) # python configure in wicd
           isPython=true
@@ -1546,6 +1582,7 @@ else
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
   contline=0
+  isPython=false
   for line in "${commandScripts[@]}"
   do
     case "$line" in
@@ -1641,6 +1678,7 @@ else
   commandScripts=(${x264Rtrn[@]})
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
+  isPython=false
   rtr=""
   combineScripts commandScripts[@] buildScripts[@]
   scriptOut=(${rtr[@]})
@@ -1674,6 +1712,7 @@ else
   commandScripts=(${jdkRtrn[@]})
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
+  isPython=false
   rtr=""
   combineScripts commandScripts[@] buildScripts[@]
   scriptOut=(${rtr[@]})
@@ -1727,6 +1766,7 @@ else
   commandScripts=(${blfsRtrn[@]})
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
+  isPython=false
   rtr=""
   combineScripts commandScripts[@] buildScripts[@]
   scriptOut=(${rtr[@]})
@@ -1754,8 +1794,10 @@ pycom[0]="./configure --prefix=/usr"
 pycom[1]="make"
 pycom[2]="make install"
 elif [[ "$pkgname" == pyxdg ]]; then
+isPython=true
 pycom[0]="python setup.py install"
 elif [[ "$pkgname" == ipython ]]; then
+isPython=true
 pycom[0]="python setup.py install --prefix=/usr"
 fi
 pyRtrn=(${pycom[@]})
@@ -1770,6 +1812,7 @@ if [ $return_val -eq $RETURN_PARAM ]; then # no build file present
 else
   buildScripts=(${rtrnBuild[@]})
   pyRtrn=""
+  isPython=false
   pyComms
   commandScripts=(${pyRtrn[@]})
   numclines=${#commandScripts[@]}
@@ -1819,6 +1862,7 @@ else
   commandScripts=(${bluezRtrn[@]})
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
+  isPython=false
   rtr=""
   combineScripts commandScripts[@] buildScripts[@]
   scriptOut=(${rtr[@]})
@@ -1851,6 +1895,7 @@ else
   commandScripts=(${gstPythonRtrn[@]})
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
+  isPython=false
   rtr=""
   combineScripts commandScripts[@] buildScripts[@]
   scriptOut=(${rtr[@]})
@@ -1883,6 +1928,7 @@ else
   commandScripts=(${libcdioRtrn[@]})
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
+  isPython=false
   rtr=""
   combineScripts commandScripts[@] buildScripts[@]
   scriptOut=(${rtr[@]})
@@ -2363,7 +2409,9 @@ EOF
 echo "chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto
 chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto
 chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML
-chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML" >> $Output
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML
+chgrp install /usr/lib/perl5/${perlvers}/i686-linux/perllocal.pod
+chmod 664 /usr/lib/perl5/${perlvers}/i686-linux/perllocal.pod" >> $Output
     ;;
     python)  #/usr/share/man
           cat >> $Output << "EOF"
@@ -2434,6 +2482,15 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /usr/share/thumbnailers
 chmod g+w,o+t /usr/share/thumbnailers
+EOF
+    ;;
+    aspell)
+          cat >> $Output << "EOF"
+echo "*************************************************************"
+echo "*                                                           *"
+echo "* English dictionary installed - edit script to change this *"
+echo "*                                                           *"
+echo "*************************************************************"
 EOF
     ;;
     attr)   #/usr/include/sys
@@ -2543,7 +2600,7 @@ ln -sv $XORG_PREFIX /usr/X11R6
 EOF
            fi
     ;;
-     x7app)
+    x7app)
            cat >> $Output << "EOF"
 chgrp install /etc/X11
 chmod g+w,o+t /etc/X11
@@ -2553,19 +2610,19 @@ chgrp install /usr/share/terminfo/x #for xterm
 chmod g+w,o+t /usr/share/terminfo/x
 EOF
     ;;
-     x7font)
+    x7font)
            cat >> $Output << "EOF"
 chgrp install /usr/share/fonts
 chmod g+w,o+t /usr/share/fonts
 EOF
     ;;
-     xcursor-themes)
+    xcursor-themes)
            cat >> $Output << "EOF"
 chgrp install /usr/share/icons
 chmod g+w,o+t /usr/share/icons
 EOF
     ;;
-     xorg-server)
+    xorg-server)
            cat >> $Output << "EOF"
 chgrp install /usr/lib/X11/modules
 chmod g+w,o+t /usr/lib/X11/modules
@@ -2575,10 +2632,12 @@ chgrp install /usr/share/X11/xorg.conf.d
 chmod g+w,o+t /usr/share/X11/xorg.conf.d
 EOF
     ;;
-     x7driver)
+    x7driver)
            cat >> $Output << "EOF"
 chgrp install /usr/lib/X11/modules/input
 chmod g+w,o+t /usr/lib/X11/modules/input
+chgrp install /usr/lib/X11/modules/drivers
+chmod g+w,o+t /usr/lib/X11/modules/drivers
 EOF
     ;;
     xterm)
@@ -2614,6 +2673,7 @@ chown xterm:xterm /usr/share/terminfo/x/xterm-xmc
 chgrp install /usr/share/pixmaps # for evol-data-server
 chmod g+w,o+t /usr/share/pixmaps
 EOF
+echo "ln -vsf $XORG_PREFIX /usr/X11R6" >> $Output
     ;;
     alsa-utils)
            cat >> $Output << "EOF"
@@ -2701,16 +2761,19 @@ EOF
      ;;
      polkit)
            cat >> $Output << "EOF"
+groupadd -fg 27 polkitd # dedicated user to take control of polkitd
+useradd -c "PolicyKit Daemon Owner" -d /etc/polkit-1 -u 27 \
+        -g polkitd -s /bin/false polkitd
 chgrp install /usr/share/polkit-1/actions # for colord
 chmod g+w,o+t /usr/share/polkit-1/actions
-chown root /etc/polkit-1/localauthority
-chmod 700 /etc/polkit-1/localauthority
-chown root /var/lib/polkit-1
-chmod 700 /var/lib/polkit-1
 chown root /usr/lib/polkit-1/polkit-agent-helper-1
 chmod 4755 /usr/lib/polkit-1/polkit-agent-helper-1
 chown root /usr/bin/pkexec
 chmod 4755 /usr/bin/pkexec
+chown polkitd /etc/polkit-1/rules.d
+chmod 700 /etc/polkit-1/rules.d
+chown polkitd /usr/share/polkit-1/rules.d
+chmod 700 /usr/share/polkit-1/rules.d
 chgrp install /etc/dbus-1 # for dbus
 chmod g+w,o+t /etc/dbus-1
 chgrp install /etc/dbus-1/system.d # for udisks
@@ -3192,6 +3255,16 @@ echo "Edit /etc/resolv.conf to suit your needs"
 echo "****************************************"
 EOF
      ;;
+     wicd)
+           cat >> $Output << "EOF"
+chgrp install /etc/xdg
+chmod g+w,o+t /etc/xdg
+chgrp install /etc/xdg/autostart
+chmod g+w,o+t /etc/xdg/autostart
+chgrp install /usr/share/applications
+chmod g+w,o+t /usr/share/applications
+EOF
+     ;;
      libxfce4util)
            cat >> $Output << "EOF"
 chgrp install /usr/include/xfce4
@@ -3252,9 +3325,12 @@ EOF
      ;;
      xfce4-session)
            cat >> $Output << "EOF"
-echo exec xfce4-session > ~/.xinitrc
+echo "exec dbus-launch --exit-with-session xfce4-session" > ~/.xinitrc
 echo john ${HOSTNAME} = NOPASSWD: /usr/lib/xfce4/session/xfsm-shutdown-helper \
   >> /etc/sudoers
+echo "********************************************************************"
+echo "Change last line in /etc/sudoers file to your username and hostname"
+echo "********************************************************************"
 EOF
      ;;
 esac
@@ -3812,7 +3888,8 @@ case $pkgname in
     ;;
     polkit)
        GetCommands \
-        | sed -e '/--with-authfw=shadow/d' \
+        | sed -e '/groupadd/,/-g polkitd -s \/bin\/false polkitd/d' \
+              -e '/--with-authfw=shadow/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4030,6 +4107,7 @@ case $pkgname in
     ffmpeg)
        GetCommands \
         | sed -e '/usr\/share\/doc\/ffmpeg/d' \
+              -e 's/..\/tools\/qt-faststart.c/tools\/qt-faststart.c/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4063,13 +4141,6 @@ case $pkgname in
     pulseaudio)
        GetCommands \
         | sed -e '/groupadd/,/-s \/bin\/false/d' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
-    ;;
-    opal)
-       GetCommands \
-        | sed -e "/make install/ i sed -i '662d' Makefile" \
-              -e "/make install/ i sed -i '676d' Makefile" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4245,7 +4316,8 @@ case $pkgname in
     ;;
     xfce4-session)
        GetCommands \
-        | sed -e '/\*\*EDITMEUSERNAMEEDITME\*\*/,/sudoers/d' \
+        | sed -e '/.xinitrc/d' \
+              -e '/\*\*EDITMEUSERNAMEEDITME\*\*/,/sudoers/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4696,11 +4768,10 @@ if [ $retval -eq $RETURN_PARAM ]; then
  exit 1
 fi
 source $cfg # make sure config file values are current
+xversion=$XVERSION
 if [[ "$SINGLE_PACKAGE" == no ]]; then
   single_package=false
-  if [[ "$SECTION" = x || "$SECTION" = ALL ]]; then # define x version
-    xversion="7.6-2"
-  elif [[ "$SECTION" = sysUtils || "$SECTION" = ALL ]]; then # get udev version
+  if [[ "$SECTION" = sysUtils || "$SECTION" = ALL ]]; then # get udev version
     if [ -z $udevvers ]; then # null, so fill
       GetudevVersion
     fi
