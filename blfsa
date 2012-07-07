@@ -12,7 +12,8 @@ fi
 REPO="BLFS"
 DumpedCommands=$LFS/blfs-commands
 Dumpedhtml=$LFS/blfs-html
-WgetOpts="" # Options for wget, e.g. proxy settings etc
+WgetList="wget-list" # default name for the source list file
+sortedfile="sortedfile" # name of the sorted WgetList file
 RETURN_PARAM=35  # error return
 RETURN_NOTSET=37 #  no dependencies set
 RETURN_DEPNOTMET=39 # package dependency not met
@@ -26,6 +27,7 @@ if [ ! -e $BuildLog ]; then
   touch $BuildLog
 fi
 BLFSBUILDFILES=${LFS}${blfsBuildFiles}/${blfsfiles} # location of the blfs build files
+SOURCEDIR=${LFS}${sourcedir}
 cfg=~/BLFS.conf # config file to hold required params
 #initialize the config variables
 BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO # define local dir for the downloaded book xml
@@ -83,6 +85,12 @@ else
   echo "BROWSER=$BROWSER" | tee -a $cfg
   echo "SINGLE_PACKAGE=$SINGLE_PACKAGE" | tee -a $cfg
 fi
+# set up names of x subdirs
+xproto="x7proto"
+xlib="x7lib"
+xapp="x7app"
+xfont="x7font"
+xdriver="x7driver"
 #
 # functions
 #
@@ -121,7 +129,7 @@ _edit () {
    elif [ $tochange = "SOURCES" ]; then
      display="download (or) local (if local, must be in ${LFS}${sourcedir}/${SECTION})"
    elif [ $tochange = "SECTION" ]; then
-     display="options are blfs, security, libraries, genUtils, sysUtils, programming, networks, server, x, xlibs, gnomePlatform, gnomeDesktop, gnomeUtils, gnomeAddLibs, gnomeAddUtils, xfce, browser, xSoftware, multimedia, pst, or ALL"
+     display="options are blfs, security, libraries, genutils, sysutils, programming, networks, server, x, xlibs, gnomeplatform, gnomedesktop, gnomeutils, gnomeaddlibs, gnomeaddutils, xfce, browser, xsoftware, multimedia, pst, or ALL"
    elif [ $tochange = "XORG_PREFIX" ]; then
      display="Choose the installation prefix for Xorg"
    elif [ $tochange = "XVERSION" ]; then
@@ -135,7 +143,7 @@ _edit () {
        display="Type firefox or seamonkey. Set SECTION to browser to install it."
      fi
    elif [ $tochange = "SINGLE_PACKAGE" ]; then
-     if [ "$SECTION" = ALL ]; then
+     if [[ "$SECTION" = ALL || "$SECTION" = all ]]; then
      display="Name of single package to install. There is no section ALL, so change it to the correct section for the package you have specified."
      else
      display="Name of single package to install. It must be in $SECTION. If specified, this will take precedence. Type no to switch off the option"
@@ -202,7 +210,7 @@ fi
 #
 SetupSections () {
 numSections=1
-if [ "$SECTION" = ALL ]; then
+if [ "$SECTION" = all ]; then
   rtrnSec=""
   GetAllSections
   return_val=$?
@@ -462,12 +470,9 @@ fi
 } # end LocalBook
 #
 CleanSourceDir () {
-SOURCEDIR=${LFS}${sourcedir}
-WgetList=wget-list
-SortedFile=sortedfile
 DirToClean=${SOURCEDIR}/${1}
 wgetFile=${DirToClean}/${WgetList}
-sortedFile=${DirToClean}/${SortedFile}
+sortedFile=${DirToClean}/${sortedfile}
 if [ -d $DirToClean ]; then
   if [ "$(ls -A $DirToClean)" ]; then
     for File in ${DirToClean}/*
@@ -489,120 +494,126 @@ else
 fi
 } #end CleanSourceDir
 #
+ChkSrcPresent () {
+# $1 is the directory to check and $2 is the wget-list of files
+fileMissing=false
+dirtochk=$1
+wgetFile=$2
+while read FileUrl; do
+  if [[ ${FileUrl:0:1} != '#' ]]; then # ignore file if it has a hash at the start
+    filetofind=$( echo $FileUrl | awk -F\/ '{print $NF}' )
+    if [ ! -e ${dirtochk}/${filetofind} ]; then
+      echo "file $filetofind not downloaded"
+      fileMissing=true
+    fi
+  fi
+done < $wgetFile
+if $fileMissing; then
+  return $RETURN_PARAM
+else
+  return 0
+fi
+} # end ChkSrcPresent
+#
 GetSources () {
 # $1 is the section name and $2 is the array of src names
 declare -a srcname=("${!2}")
-pkgfile=$WgetList
-lstFile="wget-list"
-sortedfile="sortedfile"
+pkgfile=${SOURCEDIR}/${WgetList}
 if [ ! -e "$pkgfile" ]; then
   echo "\""$pkgfile"\" does not exist. Please download wget-list"
   exit 1
 else
   echo will use $pkgfile to sort files.
 fi
-cur_user=$(ls -l $pkgfile | awk '{ print $3 }') # not used yet!
 #
-SOURCEDIR=${LFS}${sourcedir}/${1}
-if [ ! -d $SOURCEDIR ]; then
-  mkdir -v $SOURCEDIR
+SrcPath=${SOURCEDIR}/${1}
+if [ ! -d $SrcPath ]; then
+  mkdir -v $SrcPath
 fi
 for sn in ${srcname[@]}
 do
   if $single_package; then # find the package
     if [[ "$SINGLE_PACKAGE" == "$sn" ]]; then # found the package
       tomatch="/${sn}"
-      grep $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
+      grep $tomatch $pkgfile >> ${SrcPath}/${WgetList}
       break
     fi
   else
     tomatch="/${sn}"
-    grep $tomatch $pkgfile >> ${SOURCEDIR}/${lstFile}
+    grep $tomatch $pkgfile >> ${SrcPath}/${WgetList}
   fi
 done
 # make sure there are no duplicate lines
-sort -u ${SOURCEDIR}/${lstFile} > ${SOURCEDIR}/${sortedfile}
+sort -u ${SrcPath}/${WgetList} > ${SrcPath}/${sortedfile}
 if [[ "$BROWSER" == firefox ]]; then
-  sed -i '/seamonkey-/d' ${SOURCEDIR}/${sortedfile}
+  sed -i '/seamonkey-/d' ${SrcPath}/${sortedfile}
 elif [[ "$BROWSER" == seamonkey ]]; then
-  sed -i '/firefox-/d' ${SOURCEDIR}/${sortedfile}
+  sed -i '/firefox-/d' ${SrcPath}/${sortedfile}
 fi
 # download the sources
-wgetfile=${SOURCEDIR}/${sortedfile}
-wget -i $wgetfile -P $SOURCEDIR
+wgetfile=${SrcPath}/${sortedfile}
+wget -i $wgetfile -P $SrcPath
 #
-if [[ "$Section" = x || "$Section" = ALL ]]; then # get all the extra files
-  xproto="x7proto"
-  xlib="x7lib"
-  xapp="x7app"
-  xfont="x7font"
-  xdriver="x7driver"
+if [ "$Section" = x ]; then # get all the extra files
   Url=${SVN_URL}trunk/auxfiles/xorg/
   srcUrl="http://xorg.freedesktop.org/releases/individual"
 #set up the dirs under x
-  if [ ! -d ${SOURCEDIR}/${xproto} ]; then
-    mkdir -v ${SOURCEDIR}/${xproto}
+  if [ ! -d ${SrcPath}/${xproto} ]; then
+    mkdir -v ${SrcPath}/${xproto}
   fi
-  if [ ! -d ${SOURCEDIR}/${xlib} ]; then
-    mkdir -v ${SOURCEDIR}/${xlib}
+  if [ ! -d ${SrcPath}/${xlib} ]; then
+    mkdir -v ${SrcPath}/${xlib}
   fi
-  if [ ! -d ${SOURCEDIR}/${xapp} ]; then
-    mkdir -v ${SOURCEDIR}/${xapp}
+  if [ ! -d ${SrcPath}/${xapp} ]; then
+    mkdir -v ${SrcPath}/${xapp}
   fi
-  if [ ! -d ${SOURCEDIR}/${xfont} ]; then
-    mkdir -v ${SOURCEDIR}/${xfont}
+  if [ ! -d ${SrcPath}/${xfont} ]; then
+    mkdir -v ${SrcPath}/${xfont}
   fi
-  if [ ! -d ${SOURCEDIR}/${xdriver} ]; then
-    mkdir -v ${SOURCEDIR}/${xdriver}
+  if [ ! -d ${SrcPath}/${xdriver} ]; then
+    mkdir -v ${SrcPath}/${xdriver}
   fi
 #add the wget files from svn/auxfiles/xorg
-  pwgetfile=proto-${xversion}.wget
-  lwgetfile=lib-${xversion}.wget
-  awgetfile=app-${xversion}.wget
-  fwgetfile=font-${xversion}.wget
-  dwgetfile=driver-${xversion}.wget
-  svn export ${Url}${pwgetfile} ${SOURCEDIR}/${pwgetfile}
-  svn export ${Url}${lwgetfile} ${SOURCEDIR}/${lwgetfile}
-  svn export ${Url}${awgetfile} ${SOURCEDIR}/${awgetfile}
-  svn export ${Url}${fwgetfile} ${SOURCEDIR}/${fwgetfile}
-  svn export ${Url}${dwgetfile} ${SOURCEDIR}/${dwgetfile}
+  svn export ${Url}${pwgetfile} ${SrcPath}/${pwgetfile}
+  svn export ${Url}${lwgetfile} ${SrcPath}/${lwgetfile}
+  svn export ${Url}${awgetfile} ${SrcPath}/${awgetfile}
+  svn export ${Url}${fwgetfile} ${SrcPath}/${fwgetfile}
+  svn export ${Url}${dwgetfile} ${SrcPath}/${dwgetfile}
 #download the files for each section
 #proto
-  protofile=${SOURCEDIR}/${pwgetfile}
-  cd ${SOURCEDIR}/${xproto}
+  protofile=${SrcPath}/${pwgetfile}
+  cd ${SrcPath}/${xproto}
   grep -v '^#' $protofile | wget -i- -c -B ${srcUrl}/proto/
 #lib
-  libfile=${SOURCEDIR}/${lwgetfile}
-  cd ${SOURCEDIR}/${xlib}
+  libfile=${SrcPath}/${lwgetfile}
+  cd ${SrcPath}/${xlib}
   grep -v '^#' $libfile | wget -i- -c -B ${srcUrl}/lib/
 #app
-  appfile=${SOURCEDIR}/${awgetfile}
-  cd ${SOURCEDIR}/${xapp}
+  appfile=${SrcPath}/${awgetfile}
+  cd ${SrcPath}/${xapp}
   grep -v '^#' $appfile | wget -i- -c -B ${srcUrl}/app/
 #font
-  fontfile=${SOURCEDIR}/${fwgetfile}
-  cd ${SOURCEDIR}/${xfont}
+  fontfile=${SrcPath}/${fwgetfile}
+  cd ${SrcPath}/${xfont}
   grep -v '^#' $fontfile | wget -i- -c -B ${srcUrl}/font/
 #driver
-  driverfile=${SOURCEDIR}/${dwgetfile}
-  cd ${SOURCEDIR}/${xdriver}
+  driverfile=${SrcPath}/${dwgetfile}
+  cd ${SrcPath}/${xdriver}
   grep -v '^#' $driverfile | wget -i- -c -B ${srcUrl}/driver/
 fi
 } #end GetSources
 #
 GetListFile () {
 REPODIR=${BLFS_BOOK_LOC_DIR}/$version
-SOURCEDIR=${LFS}${sourcedir}
-if [ -e ${SOURCEDIR}/wget-list ]; then
-  rm ${SOURCEDIR}/wget-list
+if [ -e ${SOURCEDIR}/${WgetList} ]; then
+  rm ${SOURCEDIR}/${WgetList}
 fi
-make -j1 -f $REPODIR/Makefile -C $REPODIR BASEDIR=$SOURCEDIR wget-list
-WgetList=${SOURCEDIR}/wget-list
+make -j1 -f $REPODIR/Makefile -C $REPODIR BASEDIR=$SOURCEDIR $WgetList
+WgetFile=${SOURCEDIR}/${WgetList}
 #
 } #end GetListFile
 #
 ChkEmptySrcFiles () {
-SOURCEDIR=${LFS}${sourcedir}
 if [ ! -d ${SOURCEDIR}/${1} ]; then
   mkdir -pv ${SOURCEDIR}/${1}
   return $RETURN_PARAM
@@ -636,7 +647,6 @@ if [ $len -eq 0 ]; then
             echo -e "These files are empty:\n$zeroLenFiles"
             return $RETURN_PARAM
           fi
-        else #app has empty files
           echo -e "These files are empty:\n$zeroLenFiles"
           return $RETURN_PARAM
         fi
@@ -953,10 +963,10 @@ case $1 in
   networks)
         xmlsec=basicnet
   ;;
-  gnomePlatform|gnomeDesktop|gnomeUtils|gnomeAddLibs|gnomeAddUtils)
+  gnomeplatform|gnomedesktop|gnomeutils|gnomeaddlibs|gnomeaddutils)
         xmlsec=gnome
   ;;
-  xSoftware|browser)
+  xsoftware|browser)
         xmlsec=xsoft
   ;;
   multimedia)
@@ -1186,30 +1196,6 @@ case $pkgname in
                   ;;
                   *)
                      if ! $instfound; then #write the commands
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     db)
-             ic=0
-             cdfound=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  *build_unix*)
-                    if ! $cdfound; then
-                       cdfound=true
-                     else
-                       bcom[ic++]=$tline
-                       cdfound=false
-                     fi
-                  ;;
-                  *)
-                     if ! $cdfound; then #write the commands
                        bcom[ic++]=$tline
                      fi
                   ;;
@@ -1691,11 +1677,11 @@ fi
 } # end Getx264Commands
 jdkComms () {
 local jdkcom=""
-jdkcom[0]="install -v -m755 -d /opt/jdk1-7u04"
-jdkcom[1]="mv -v * /opt/jdk1-7u04"
-jdkcom[2]="ln -v -sf xawt/libmawt.so /opt/jdk1-7u04/jre/lib/i386/"
-jdkcom[3]="sed -i 's@XINERAMA@FAKEEXTN@g' /opt/jdk1-7u04/jre/lib/i386/xawt/libmawt.so"
-jdkcom[4]="ln -v -nsf jdk1-7u04 /opt/jdk"
+jdkcom[0]="install -v -m755 -d /opt/jdk1-7u5"
+jdkcom[1]="mv -v * /opt/jdk1-7u5"
+jdkcom[2]="ln -v -sf xawt/libmawt.so /opt/jdk1-7u5/jre/lib/i386/"
+jdkcom[3]="sed -i 's@XINERAMA@FAKEEXTN@g' /opt/jdk1-7u5/jre/lib/i386/xawt/libmawt.so"
+jdkcom[4]="ln -v -nsf jdk1-7u5 /opt/jdk"
 jdkRtrn=(${jdkcom[@]})
 } #end jdkComms
 GetjdkCommands () {
@@ -2104,12 +2090,12 @@ EOF
             case $pkgname in
               glib-networking)
                 cat >> $Output << "EOF"
-  delElementPattern DepRtrn[@] "gnomePlatform/gset-dsktp-schms"
+  delElementPattern DepRtrn[@] "gnomeplatform/gset-dsktp-schms"
 EOF
               ;;
               libsoup|gvfs)
                 cat >> $Output << "EOF"
-  delElementPattern DepRtrn[@] "gnomePlatform/libgnome-keyring"
+  delElementPattern DepRtrn[@] "gnomeplatform/libgnome-keyring"
 EOF
               ;;
               webkitgtk)
@@ -2119,7 +2105,7 @@ EOF
               ;;
               pulseaudio|gst-plgns-good|libcanberra)
                 cat >> $Output << "EOF"
-  delElementPattern DepRtrn[@] "gnomePlatform/gconf"
+  delElementPattern DepRtrn[@] "gnomeplatform/gconf"
 EOF
               ;;
             esac
@@ -2269,7 +2255,22 @@ EOF
 resolvelinks
 cat >> $Output << "EOF"
 if [ "$(grep -q ^$PkgName\: /etc/passwd;echo $?)" != 0 ]; then
-  if [ "$(grep -q ^install2\: /etc/group;echo $?)" != 0 ]; then
+  if [ "$(grep -q ^install3\: /etc/group;echo $?)" = 0 ]; then # install3 exists
+    numcharInstall install3
+    if [ $numchars -gt 2030 ]; then
+      echo "You'll have to make yet another install group - install4"
+      echo "Update /usr/sbin/installpkg as before"
+      exit 1
+    fi
+  elif [ "$(grep -q ^install2\: /etc/group;echo $?)" = 0 ]; then
+    numcharInstall install2
+    if [ $numchars -gt 2030 ]; then
+      echo "Yoiks, what a lot of packages you've installed"
+      echo "You'll have to make yet another install group - install3"
+      echo "Update /usr/sbin/installpkg as before"
+      exit 1
+    fi
+  else
     numcharInstall install
     if [ $numchars -gt 2030 ]; then # limit of 2048. Create a new install group
       echo "install group has nearly reached the limit of 2048 chars"
@@ -2277,14 +2278,6 @@ if [ "$(grep -q ^$PkgName\: /etc/passwd;echo $?)" != 0 ]; then
       echo "/etc/group and insert install2:x:9999:"
       echo "Then change install in /usr/sbin/installpkg to install2"
       echo "You'll find it at the end of the useradd line."
-      exit 1
-    fi
-  else
-    numcharInstall install2
-    if [ $numchars -gt 2030 ]; then
-      echo "Yoiks, what a lot of packages you've installed"
-      echo "You'll have to make yet another install group - install3"
-      echo "Update /usr/sbin/installpkg as before"
       exit 1
     fi
   fi
@@ -2405,10 +2398,12 @@ chgrp install /etc/ld.so.conf
 chmod 664 /etc/ld.so.conf
 EOF
     ;;
-    xml-parser)  #perl
+    archive-zip)  #perl
 echo "chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto
-chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto
-chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML
+chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto" >> $Output
+    ;;
+    xml-parser)  #perl
+echo "chgrp install /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML
 chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux/auto/XML
 chgrp install /usr/lib/perl5/${perlvers}/i686-linux/perllocal.pod
 chmod 664 /usr/lib/perl5/${perlvers}/i686-linux/perllocal.pod" >> $Output
@@ -2800,6 +2795,12 @@ chgrp install /usr/include/gstreamer-0.10/gst/video
 chmod g+w,o+t /usr/include/gstreamer-0.10/gst/video
 EOF
      ;;
+     libcanberra)
+           cat >> $Output << "EOF"
+chgrp install /etc/gconf/schemas
+chmod g+w,o+t /etc/gconf/schemas
+EOF
+     ;;
      gst-plgns-good)
            cat >> $Output << "EOF"
 chgrp install /etc/gconf/schemas
@@ -3017,6 +3018,12 @@ chgrp install /usr/share/gnome/help
 chmod g+w,o+t /usr/share/gnome/help
 EOF
      ;;
+     gnome-serch-tool)
+           cat >> $Output << "EOF"
+chgrp install /etc/gconf/schemas
+chmod g+w,o+t /etc/gconf/schemas
+EOF
+     ;;
      gnome-icon-thme)
            cat >> $Output << "EOF"
 chgrp install /usr/share/icons/gnome
@@ -3157,6 +3164,8 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/share/gnome-shell # if gnome-shell installed first
 chmod g+w,o+t /usr/share/gnome-shell
+chgrp install /usr/lib/mozilla/plugins
+chmod g+w,o+t /usr/lib/mozilla/plugins
 EOF
      ;;
      gnome-session)
@@ -3402,11 +3411,11 @@ case $pkgname in
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    gnome-powr-mangr|gnome-sys-monitr|gnome-scrnshot|gnome-system-log|gucharmap|mousetweaks|vino|accerciser|gedit|ghex|totem|epiphany-ext|nautilus-sendto)
+    gnome-powr-mangr|gnome-sys-monitr|gnome-scrnshot|gnome-system-log|gucharmap|mousetweaks|vino|accerciser|gedit|ghex|epiphany-ext|nautilus-sendto)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool|libpeas)
+    gst-plgns-good|aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool|libpeas|totem)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /etc/gconf/gconf.xml.defaults/* /usr/share/icons/hicolor/icon-theme.cache"
     ;;
@@ -3447,7 +3456,7 @@ case $pkgname in
         links=""
     ;;
     avahi)
-        doFirst="groupadd -fg 86 netdev && export QTDIR=/opt/qt && export PKG_CONFIG_PATH=/opt/qt/lib/pkgconfig"
+        doFirst="groupadd -fg 86 netdev && export QTDIR=/opt/qt && export PKG_CONFIG_PATH=/opt/qt/lib/pkgconfig && chgrp install /usr/share/applications && chmod 1775 /usr/share/applications"
         links=""
     ;;
     gnome-icon-thme|gnm-icn-thme-ext|gnm-icn-thme-sym)
@@ -3606,15 +3615,6 @@ if [ ! -e $phpManual ]; then
 wget -O $phpManual http://us.php.net/get/${phpManual}/from/this/mirror
 fi
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
-EOF
-   ;;
-   bluez-)
-    cat << "EOF"
-bluezSrc=bluez-4.99.tar.gz
-if [ ! -e $bluezSrc ]; then
-wget http://www.kernel.org/pub/linux/bluetooth/${bluezSrc}
-fi
-cd $(tar vxf $bluezSrc | awk -F\/ 'END{print $1}')
 EOF
    ;;
    gst-python-)
@@ -3818,6 +3818,13 @@ case $pkgname in
               -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BINDIR)/d' systemv\/Makefile" \
               -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) \\\\\$(PHPDIR)/d' scripting\/php\/Makefile" \
               -e 's/make install/make install < ..\/cups-responses/' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    opal)
+       GetCommands \
+        | sed -e "/make install/ i sed -i '/mkdir -p \\\\\$(DESTDIR)\\\\\$(libdir); chmod 755 \\\\\$(DESTDIR)\\\\\$(libdir)/d' Makefile" \
+              -e "/make install/ i sed -i '/mkdir -p \\\\\$(DESTDIR)\\\\\$(libdir)\\\/pkgconfig ; chmod 755 \\\\\$(DESTDIR)\\\\\$(libdir)\\\/pkgconfig/d' Makefile" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4035,7 +4042,7 @@ case $pkgname in
     ;;
     db)
        GetCommands \
-        | sed -e '/chown/,/      \/usr\/share\/doc\/db-5.3.15/d' \
+        | sed -e 's/root:root/db:db/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4173,7 +4180,8 @@ case $pkgname in
     ;;
     ghostscript)
        GetCommands \
-        | sed -e '/bin\/gs/d' \
+        | sed -e 's/LIBS=-lz/LIBS=-lz --with-install-cups/' \
+              -e '/bin\/gs/d' \
               -e '/tar -xvf/ i for (( i=0; i<\${#fontfile[@]}; i++ )); do' \
               -e 's/\*\*EDITME<font-tarball>EDITME\*\*/\${fontfile[\$i]}/' \
               -e '/tar -xvf/ a done' \
@@ -4277,12 +4285,6 @@ case $pkgname in
           >> $Output
        fi
     ;;
-    mbp-info)
-       GetCommands \
-        | sed -e 's@\$GNOME_PREFIX@/usr@' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
-    ;;
     bind)
        GetCommands \
         | sed -e '/patch -Np1 -i/d' \
@@ -4310,7 +4312,8 @@ case $pkgname in
     gimp)
        GetCommands \
         | awk '/make install/{n+=1}{if (n==2){sub("make install","",$0)};print }' \
-        | sed -e 's[\*\*EDITME<browser>EDITME\*\*['$BROWSER'[' \
+        | sed -e 's/ --without-gvfs//' \
+              -e 's[\*\*EDITME<browser>EDITME\*\*['$BROWSER'[' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4537,7 +4540,7 @@ fi
 #test if the section-files exists
 if [ ! -e $pkgFiles ]; then
   echo "Couldn't find $pkgFiles"
-  if [ "$InSection" = ALL ]; then
+  if [ "$InSection" = all ]; then
     echo "You've requested ALL sections"
     echo "You must specify the section that contains $pkgToTest and"
   fi
@@ -4622,10 +4625,10 @@ if [ "$Section" != blfs ]; then
   PkgDepend
   testDeps
 fi
-if [[ "$Section" = networks || "$Section" = sysUtils || "$Section" = xlibs || "$Section" = multimedia ]]; then
+if [[ "$Section" = networks || "$Section" = sysutils || "$Section" = xlibs || "$Section" = multimedia ]]; then
   delElementPattern
 fi
-if [[ "$Section" == gnomeDesktop || "$Section" == gnomeUtils ]]; then
+if [[ "$Section" == gnomedesktop || "$Section" == gnomeutils ]]; then
   setMime
 fi
 numpkgs=${#PkgName[@]}
@@ -4768,14 +4771,22 @@ if [ $retval -eq $RETURN_PARAM ]; then
  exit 1
 fi
 source $cfg # make sure config file values are current
-xversion=$XVERSION
+SECTION=$(echo ${SECTION,,*}) # convert SECTION to lower case
+xversion=$XVERSION # set up the x version and the wget file names
+pwgetfile=proto-${xversion}.wget
+lwgetfile=lib-${xversion}.wget
+awgetfile=app-${xversion}.wget
+fwgetfile=font-${xversion}.wget
+dwgetfile=driver-${xversion}.wget
+#
 if [[ "$SINGLE_PACKAGE" == no ]]; then
   single_package=false
-  if [[ "$SECTION" = sysUtils || "$SECTION" = ALL ]]; then # get udev version
+  if [[ "$SECTION" == sysutils || "$SECTION" == all ]]; then # get udev version
     if [ -z $udevvers ]; then # null, so fill
       GetudevVersion
     fi
-  elif [[ "$SECTION" = libraries || "$SECTION" = programming || "$SECTION" = ALL ]]; then #perl vers
+  fi
+  if [[ "$SECTION" == libraries || "$SECTION" == programming || "$SECTION" == all ]]; then #perl vers
     if [ -z $perlvers ]; then # null, so fill
       GetPerlVersion
     fi
@@ -4848,7 +4859,7 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
   if [ "$GNOME_OR_XFCE" = gnome ]; then # skip section xfce
     if [ "$Section" = xfce ]; then skipSection=true; fi
   else # skip all the gnome sections
-    if [[ "$Section" == gnomePlatform || "$Section" == gnomeDesktop || "$Section" == gnomeUtils || "$Section" == gnomeAddUtils || "$Section" == gnomeAddLibs ]]; then
+    if [[ "$Section" == gnomeplatform || "$Section" == gnomedesktop || "$Section" == gnomeutils || "$Section" == gnomeaddutils || "$Section" == gnomeaddlibs ]]; then
     skipSection=true
     fi
   fi
@@ -4865,25 +4876,152 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
       echo "Place it there in order to continue. Exiting now"
       exit 1
     fi
-    if [ "$SOURCES" = download ]; then # download the sources for this section
+    if [[ "$SOURCES" = download || "$SOURCES" = downloads ]]; then # download the sources for this section
       CleanSourceDir $Section # clean the sources file if not empty
+      if [ "$Section" = x ]; then # delete the x subdirs
+        rm -rf ${SOURCEDIR}/${Section}/${xproto}
+        rm -rf ${SOURCEDIR}/${Section}/${xlib}
+        rm -rf ${SOURCEDIR}/${Section}/${xapp}
+        rm -rf ${SOURCEDIR}/${Section}/${xfont}
+        rm -rf ${SOURCEDIR}/${Section}/${xdriver}
+      fi
       GetListFile #get wget-list
       GetSources $Section rtrnSrc[@] # download the sources in the wget-list file
-      ChkEmptySrcFiles $Section #check for failed downloads
-      return_val=$?
-      if [ $return_val -eq $RETURN_PARAM ]; then
-        echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
-        echo "You will have to download the required sources to this dir."
-        echo "Continuing to make the scripts for section $Section"
+    fi
+# check all requested src files are present
+    if [[ "$Section" != browser ]]; then
+      ChkSrcPresent ${SOURCEDIR}/${Section} ${SOURCEDIR}/${Section}/${WgetList}
+      ret_val=$?
+      if [ $ret_val -eq $RETURN_PARAM ]; then 
+        echo "not all requested files in ${SOURCEDIR}/${Section}/${WgetList} have been downloaded"
+        echo "You will have to download them yourself and place in ${SOURCEDIR}/${Section}"
+        echo "Do you want to continue? (Y/n)"
+        read reply
+        case $reply in
+           [yY]|[yY][Ee][Ss])
+                echo "okay continue"
+           ;;  
+           [nN]|[nN][Oo])
+                echo "Exiting now"
+                exit 1
+           ;;  
+           *)  
+                echo "okay continue"
+           ;;  
+        esac
       fi
-    else # sources are local
-      ChkEmptySrcFiles $Section # check for any empty files
-      return_val=$?
-      if [ $return_val -eq $RETURN_PARAM ]; then
-        echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
-        echo "You will have to download the required sources to this dir."
-        echo "Continuing to make the scripts for section $Section"
+      if [ "$Section" = x ]; then # check all x files were downloaded
+        ChkSrcPresent ${SOURCEDIR}/${Section}/${xproto} ${SOURCEDIR}/${Section}/${pwgetfile}
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then  
+          echo "not all requested files in ${SOURCEDIR}/${Section}/${pwgetfile} have been downloaded"
+          echo "You will have to download them yourself and place in ${SOURCEDIR}/${Section}/${xproto}"
+          echo "Do you want to continue? (Y/n)"
+          read reply
+          case $reply in
+             [yY]|[yY][Ee][Ss])
+                echo "okay continue"
+             ;;
+             [nN]|[nN][Oo])
+                echo "Exiting now"
+                exit 1
+             ;;
+             *)
+                echo "okay continue"
+             ;;
+          esac
+        fi
+        ChkSrcPresent ${SOURCEDIR}/${Section}/${xlib} ${SOURCEDIR}/${Section}/${lwgetfile}
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then
+          echo "not all requested files in ${SOURCEDIR}/${Section}/${lwgetfile} have been downloaded"
+          echo "You will have to download them yourself and place in ${SOURCEDIR}/${Section}/${xlib}"
+          echo "Do you want to continue? (Y/n)"
+          read reply
+          case $reply in
+             [yY]|[yY][Ee][Ss])
+                echo "okay continue"
+             ;;
+             [nN]|[nN][Oo])
+                echo "Exiting now"
+                exit 1
+             ;;
+             *)
+                echo "okay continue"
+             ;;
+          esac
+        fi
+        ChkSrcPresent ${SOURCEDIR}/${Section}/${xapp} ${SOURCEDIR}/${Section}/${awgetfile}
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then
+          echo "not all requested files in ${SOURCEDIR}/${Section}/${awgetfile} have been downloaded"
+          echo "You will have to download them yourself and place in ${SOURCEDIR}/${Section}/${xapp}"
+          echo "Do you want to continue? (Y/n)"
+          read reply
+          case $reply in
+             [yY]|[yY][Ee][Ss])
+                echo "okay continue"
+             ;;
+             [nN]|[nN][Oo])
+                echo "Exiting now"
+                exit 1
+             ;;
+             *)
+                echo "okay continue"
+             ;;
+          esac
+        fi
+        ChkSrcPresent ${SOURCEDIR}/${Section}/${xfont} ${SOURCEDIR}/${Section}/${fwgetfile}
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then
+          echo "not all requested files in ${SOURCEDIR}/${Section}/${fwgetfile} have been downloaded"
+          echo "You will have to download them yourself and place in ${SOURCEDIR}/${Section}/${xfont}"
+          echo "Do you want to continue? (Y/n)"
+          read reply
+          case $reply in
+             [yY]|[yY][Ee][Ss])
+                echo "okay continue"
+             ;;
+             [nN]|[nN][Oo])
+                echo "Exiting now"
+                exit 1
+             ;;
+             *)
+                echo "okay continue"
+             ;;
+          esac
+        fi
+        ChkSrcPresent ${SOURCEDIR}/${Section}/${xdriver} ${SOURCEDIR}/${Section}/${dwgetfile}
+        ret_val=$?
+        if [ $ret_val -eq $RETURN_PARAM ]; then
+          echo "not all requested files in ${SOURCEDIR}/${Section}/${dwgetfile} have been downloaded"
+          echo "You will have to download them yourself and place in ${SOURCEDIR}/${Section}/${xdriver}"
+          echo "Do you want to continue? (Y/n)"
+          read reply
+          case $reply in
+             [yY]|[yY][Ee][Ss])
+                echo "okay continue"
+             ;;
+             [nN]|[nN][Oo])
+                echo "Exiting now"
+                exit 1
+             ;;
+             *)
+                echo "okay continue"
+             ;;
+          esac
+        fi
       fi
+    else # check the browser source exists
+      ChkSrcPresent ${SOURCEDIR}/${Section} ${SOURCEDIR}/${Section}/${sortedfile}
+      if [ "$?" -eq $RETURN_PARAM ]; then exit 1; fi
+    fi
+    ChkEmptySrcFiles $Section #check for empty source files
+    return_val=$?
+    if [ $return_val -eq $RETURN_PARAM ]; then
+      echo "Dir ${LFS}${sourcedir}/${Section} is empty or has empty files"
+      echo "You will have to download the required sources to this dir."
+      echo "Continuing to make the scripts for section $Section"
     fi
     if [ "$Section" = browser ]; then
       if [ "$BROWSER" = firefox ]; then
