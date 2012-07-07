@@ -6,7 +6,7 @@ Run blfsa as root from your host. Make sure you have already chrooted into LFS f
 When you first run blfsa, svn the book, download the sources and set the section to libraries. This will create a script called libraries.sh in $LFS and will download the sources to /blfs-sources/libraries in $LFS. Then run the libraries script from within the chroot environment.
 Carry on like this for each section. The available sections are listed in the config file editor.
 
-I've included pkgorder.sh which is a suggested order for running the scripts so that the dependencies are met as fast as possible. In order to run pkgorder.sh you must have created all the sections mentioned there and have downloaded all the sources. To try and make this easier, I've included an option ALL in the SECTION edit of the config file. This will create the scripts for all the sections and if you have SOURCES set to download, it will download all the sources. I tried doing this yesterday and it worked!! Amazing - it amazed me, anyway. You need a fairly fast connection. The downloads took about 1/2 hour. The qt4 source alone is about 240 MB.
+I've included pkgorder.sh which is a suggested order for running the scripts so that the dependencies are met as fast as possible. The optimum package order will depend on your version of LFS. In order to run pkgorder.sh you must have created all the sections mentioned there and have downloaded all the sources. To try and make this easier, I've included an option ALL in the SECTION edit of the config file. This will create the scripts for all the sections and if you have SOURCES set to download, it will download all the sources. I tried doing this yesterday and it worked!! Amazing - it amazed me, anyway. You need a fairly fast connection. The downloads took about 1/2 hour. The qt4 source alone is about 240 MB.
 
 blfsfiles.tar.xz is unpacked to /blfsBuildFiles/blfsfiles and contains all the definitions necessary to build the scripts. You will see two types of files:
 $SECTION-files and $SECTION-dependencies. Have a look at these files. The -files have three names for each package. The first is the package name used to install the package. The second is the name of the source file (minus the version) and the third name is that used in the commands from the xml files. These are in /blfs-commands after you've downloaded the book xml. You can change the order of the packages to try and maximize the rate at which dependencies are met. You can also delete packages if you don't want them or add them as you require. I've included a jhbuild.list file to show you the order that gnome's jhbuild suggests for a gnome-3.2 build.
@@ -19,7 +19,7 @@ BTW, I should mention that I've removed a lot of the package documentation from 
 
 Problems - 
 
-I've included a java jdk binary file (jdk1.7u4) in the blfsfiles tar file because blfs no longer installs this. It suggests installing IcedTea but I haven't tried to automate that yet - may be never. When you run programming.sh, the jdk installs to /opt.
+I've included a java jdk binary file (jdk1.7u5) in the blfsfiles tar file because blfs no longer installs this. It suggests installing IcedTea but I haven't tried to automate that yet - may be never. When you run programming.sh, the jdk installs to /opt.
 
 In the book the blfs-bootscripts are usually installed immediately after a package. The package scripts do not do this so you will have to install the bootscripts yourself. Run blfsa and choose section blfs and download for the SOURCES. This will create blfs.sh. To install a script do: ./blfs.sh <scriptname>  e.g. ./blfs.sh dbus or ./blfs.sh httpd. The scripts are installed with package-user name blfs-btscrpts.
 
@@ -27,6 +27,7 @@ pkg-config has been put back into LFS in current_development. To support this, p
 
 blfsa is fairly large so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site - thanks.
 
+Release1.8 - addded a check that all requested source files have been downloaded.
 Release1.7 - updated xorg to version 7.7-1 and moved spidermonkey to genUtils.
 Release1.6 - changed the deletes in cups, attr and acl to match a pattern rather than line numbers.
 Release1.5 - allow blfsa to keep pace with frequent firefox updates.
