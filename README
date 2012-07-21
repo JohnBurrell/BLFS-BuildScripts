@@ -27,7 +27,8 @@ pkg-config has been put back into LFS in current_development. To support this, p
 
 blfsa is fairly large so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site - thanks.
 
-Release1.8 - addded a check that all requested source files have been downloaded.
+Release1.9 - general updates to keep pace with changes in the book
+Release1.8 - added a check that all requested source files have been downloaded.
 Release1.7 - updated xorg to version 7.7-1 and moved spidermonkey to genUtils.
 Release1.6 - changed the deletes in cups, attr and acl to match a pattern rather than line numbers.
 Release1.5 - allow blfsa to keep pace with frequent firefox updates.
