@@ -28,6 +28,7 @@ if [ ! -e $BuildLog ]; then
 fi
 BLFSBUILDFILES=${LFS}${blfsBuildFiles}/${blfsfiles} # location of the blfs build files
 SOURCEDIR=${LFS}${sourcedir}
+build="build" # name of the build file for each package
 cfg=~/BLFS.conf # config file to hold required params
 #initialize the config variables
 BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO # define local dir for the downloaded book xml
@@ -942,7 +943,7 @@ rtr=(${combine[@]})
 #
 getBuild () {
 local abuild=""
-buildfile=$BLFSBUILDFILES/build
+buildfile=$BLFSBUILDFILES/buildscr
 if [ ! -e $buildfile ]; then
   return $RETURN_PARAM
 else
@@ -1056,6 +1057,38 @@ case $pkgname in
                   ;;
                esac
              done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     firewall)
+             ic=0
+             EOFfound=false # need to find 2 EOFs and ignore the remaining commands
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  *EOF*)
+                    if ! $EOFfound; then # found first EOF  - write til next EOF
+                      EOFfound=true
+                      bcom[ic++]=$tline # write the cat - EOF line
+                    else # finish writing commands
+                      bcom[ic++]=$tline # EOF line
+                      EOFfound=false
+                    fi   
+                  ;;
+                  modprobe*)
+                    :
+                  ;;
+                  chmod*)
+                      bcom[ic++]=$tline
+                      break
+                  ;;
+                  *)   
+                    if $EOFfound; then # write all commands until next EOF
+                      bcom[ic++]=$tline
+                    fi   
+                  ;;   
+               esac 
+             done 
              rtrnCom=(${bcom[@]})
              return 0
      ;;
@@ -1315,6 +1348,10 @@ else
         "python setup.py configure"*) # python configure in wicd
           isPython=true
           break
+        ;;
+        'cat > /etc/rc.d/rc.iptables << "EOF"') # the firewall for iptables
+         echo $line
+         ((countg++))
         ;;
         *configure*|*Configure*|*bootstrap*|*config*|*autogen.sh*|cmake*) # boost is bootstrap, openssl is config mysql is cmake
           if $isSed; then # write out the sed lines
@@ -1827,39 +1864,6 @@ return 0
 fi
 } # end GetPythonModule
 #
-bluezComms () {
-local bluezcom=""
-bluezcom[0]="./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var"
-bluezcom[1]="make"
-bluezcom[2]="make install"
-bluezRtrn=(${bluezcom[@]})
-} # bluezComms
-#
-GetBluezCommands () {
-rtrnBuild=""
-getBuild
-return_val=$?
-if [ $return_val -eq $RETURN_PARAM ]; then # no build file present
-  return $RETURN_PARAM
-else
-  buildScripts=(${rtrnBuild[@]})
-  bluezRtrn=""
-  bluezComms
-  commandScripts=(${bluezRtrn[@]})
-  numclines=${#commandScripts[@]}
-  countg=0 # initialize commands counter
-  isPython=false
-  rtr=""
-  combineScripts commandScripts[@] buildScripts[@]
-  scriptOut=(${rtr[@]})
-  for t in "${scriptOut[@]}"
-  do
-    echo $t
-  done
-return 0
-fi
-} # end GetBluezCommands
-#
 gstPythonComms () {
 local gstPythoncom=""
 gstPythoncom[0]="./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-valgrind"
@@ -1971,6 +1975,7 @@ SVNINFO=\"$SVNINFO\"
 sourcedir=$sourcedir
 blfsfiles=${blfsBuildFiles}/${blfsfiles}
 BuildLog=$BuildLog
+build=$build # name of the build file for each package
 Section=$cursection
 PKGUSERDIR=$PKGUSERDIR" >> $Output
 } # end Header
@@ -1991,9 +1996,11 @@ echo "PkgUserDir=${PKGUSERDIR}/${cursection}" >> $Output
 cat >> $Output << "EOF"
 complete -o default -o nospace -A user su finger pinky
 export PkgName=$LOGNAME
-if [ -e ${PkgUserDir}/${LOGNAME}/build -a ! -e ~/.${LOGNAME} ]; then
+EOF
+echo "if [ -e \${PkgUserDir}/\${LOGNAME}/$build -a ! -e ~/.\${LOGNAME} ]; then
   cd
-  bash ${PkgUserDir}/${LOGNAME}/build
+  bash \${PkgUserDir}/\${LOGNAME}/$build" >> $Output
+cat >> $Output << "EOF"
   exit
 fi
 BashProfile
@@ -2014,9 +2021,11 @@ echo "PkgUserDir=${PKGUSERDIR}/${cursection}" >> $Output
 cat >> $Output << "EOF"
 complete -o default -o nospace -A user su finger pinky
 export PkgName=$LOGNAME
-if [ -e ${PkgUserDir}/${LOGNAME}/build -a ! -e ~/.${LOGNAME} ]; then
+EOF
+echo "if [ -e \${PkgUserDir}/\${LOGNAME}/$build -a ! -e ~/.\${LOGNAME} ]; then
   cd
-  bash ${PkgUserDir}/${LOGNAME}/build
+  bash \${PkgUserDir}/\${LOGNAME}/$build" >> $Output
+cat >> $Output << "EOF"
   exit
 fi
 BashProfile
@@ -2070,6 +2079,13 @@ if [ -e "${PkgUserDir}/${PkgName}/.${PkgName}" ]; then
   echo "skipping $PkgName"
   return
 fi
+EOF
+case $pkgname in
+   firewall) # no need to check dependencies
+   echo "BuildScript=true" >> $Output
+   ;;
+   *)
+cat >> $Output << "EOF"
 # check for dependencies
 BuildScript=false
 FuncName=$( echo $PkgName | sed -e s/-//g -e s/_//g )
@@ -2125,8 +2141,10 @@ cat >> $Output << "EOF"
     BuildScript=true
   fi
 fi
-if $BuildScript; then
 EOF
+   ;;
+esac
+echo "if \$BuildScript; then" >> $Output
    ;;
 esac
 echo 'install -v -d ${PkgUserDir}/${PkgName}' >> $Output
@@ -2137,18 +2155,16 @@ cp ${sourcedir}/${Section}/${repsec}-${xversion}.wget ${PkgUserDir}/
 EOF
    ;;
 esac
+echo "touch \${PkgUserDir}/\${PkgName}/$build" >> $Output
 cat >> $Output << "EOF"
-touch ${PkgUserDir}/${PkgName}/build
 echo "#!/bin/bash
-BuildLog=$BuildLog" > ${PkgUserDir}/${PkgName}/build
 EOF
+echo 'BuildLog=$BuildLog" > ${PkgUserDir}/${PkgName}/'$build >> $Output
 if [[ "$pkgname" == "blfs-btscrpts" ]]; then
-  cat >> $Output << "EOF"
-echo "bsToInstall=$bsToInstall" >> ${PkgUserDir}/${PkgName}/build
-EOF
+echo "echo \"bsToInstall=\$bsToInstall\" >> \${PkgUserDir}/\${PkgName}/$build" >> $Output
 fi
+echo "cat >> \${PkgUserDir}/\${PkgName}/$build << \"IPS\"" >>$Output
 cat >> $Output << "EOF"
-cat >> ${PkgUserDir}/${PkgName}/build << "IPS"
 set +h
 PkgName=$LOGNAME
 EOF
@@ -2161,6 +2177,11 @@ case $pkgname in
 echo "sourcedir=${sourcedir}/${Section}
 blfsfiles=${blfsBuildFiles}/${blfsfiles}" >> $Output
   ;;
+  firewall) # no source file
+     cat >> $Output << "EOF"
+starttime=$( date +%s )
+EOF
+  ;;
   *)
 echo "sourcedir=${sourcedir}/${Section}" >> $Output
   ;;
@@ -2170,6 +2191,9 @@ case $pkgname in
      cat >> $Output << "EOF"
 starttime=$( date +%s )
 EOF
+  ;;
+  firewall)
+     :
   ;;
   *)
 unpack >> $Output
@@ -2240,7 +2264,7 @@ cat >> $Output << "EOF"
 endtime=$( date +%s )
 EOF
 case $pkgname in
-  cacerts|blfs-btscrpts|x7proto|x7lib|x7app|x7font|x7driver|xterm)
+  cacerts|blfs-btscrpts|x7proto|x7lib|x7app|x7font|x7driver|xterm|firewall)
      : # don't delete any files
   ;;
   *)
@@ -2335,6 +2359,7 @@ esac
 cat >> $Output << "EOF"
 ldconfig
 EOF
+echo "chown \$PkgName:\$PkgName \$PkgUserDir/\$PkgName/$build" >> $Output
 #set required dirs to be install dirs plus other adjustments
 case $pkgname in
     json-c) # /usr/libexec
@@ -2362,6 +2387,8 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /var/cache
 chmod g+w,o+t /var/cache
+chgrp install /lib/udev # for bluez
+chmod g+w,o+t /lib/udev
 chgrp install /lib/udev/rules.d # for lvm2
 chmod g+w,o+t /lib/udev/rules.d
 EOF
@@ -2619,20 +2646,26 @@ EOF
     ;;
     xorg-server)
            cat >> $Output << "EOF"
-chgrp install /usr/lib/X11/modules
-chmod g+w,o+t /usr/lib/X11/modules
 chgrp install /usr/include/xorg
 chmod g+w,o+t /usr/include/xorg
 chgrp install /usr/share/X11/xorg.conf.d
 chmod g+w,o+t /usr/share/X11/xorg.conf.d
+chgrp install /usr/lib/xorg
+chmod g+w,o+t /usr/lib/xorg
+chgrp install /usr/lib/xorg/modules
+chmod g+w,o+t /usr/lib/xorg/modules
+chgrp install /usr/lib/xorg/modules/multimedia
+chmod g+w,o+t /usr/lib/xorg/modules/multimedia
+chown root /usr/bin/Xorg # setuid root binary
+chmod 4755 /usr/bin/Xorg
 EOF
     ;;
     x7driver)
            cat >> $Output << "EOF"
-chgrp install /usr/lib/X11/modules/input
-chmod g+w,o+t /usr/lib/X11/modules/input
-chgrp install /usr/lib/X11/modules/drivers
-chmod g+w,o+t /usr/lib/X11/modules/drivers
+chgrp install /usr/lib/xorg/modules/input
+chmod g+w,o+t /usr/lib/xorg/modules/input
+chgrp install /usr/lib/xorg/modules/drivers
+chmod g+w,o+t /usr/lib/xorg/modules/drivers
 EOF
     ;;
     xterm)
@@ -2748,6 +2781,8 @@ chgrp install /usr/lib/cups/filter
 chmod g+w,o+t /usr/lib/cups/filter
 chgrp install /usr/share/cups
 chmod g+w,o+t /usr/share/cups
+chgrp install /usr/share/cups/model # for ghostscript
+chmod g+w,o+t /usr/share/cups/model
 chgrp install /etc/cups
 chmod g+w,o+t /etc/cups
 chgrp install /usr/lib/cups/backend
@@ -3467,6 +3502,10 @@ case $pkgname in
         doFirst=""
         links="/usr/share/icons/hicolor/icon-theme.cache"
     ;;
+    firewall)
+        doFirst="chgrp install /etc/rc.d && chmod 1775 /etc/rc.d"
+        links=""
+    ;;
     *)
         doFirst=""
         links=""
@@ -3963,6 +4002,12 @@ case $pkgname in
         | sed -e '/This.block.must.be.edited/,/End.of.editable.block/d' \
         >> $Output
     ;;
+    bluez)
+       GetCommands \
+        | sed -e '/make install-bluetooth/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     dbus)
        GetCommands \
         | sed -e '/groupadd/,/-u 18 -g messagebus/d' \
@@ -4117,9 +4162,6 @@ case $pkgname in
               -e 's/..\/tools\/qt-faststart.c/tools\/qt-faststart.c/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
-    ;;
-    bluez)
-        GetBluezCommands >> $Output
     ;;
     gst-python)
         GetGstPythonCommands >> $Output
@@ -4899,14 +4941,14 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
         read reply
         case $reply in
            [yY]|[yY][Ee][Ss])
-                echo "okay continue"
+                echo "okay continuing"
            ;;  
            [nN]|[nN][Oo])
                 echo "Exiting now"
                 exit 1
            ;;  
            *)  
-                echo "okay continue"
+                echo "okay continuing"
            ;;  
         esac
       fi
@@ -4920,14 +4962,14 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
           read reply
           case $reply in
              [yY]|[yY][Ee][Ss])
-                echo "okay continue"
+                echo "okay continuing"
              ;;
              [nN]|[nN][Oo])
                 echo "Exiting now"
                 exit 1
              ;;
              *)
-                echo "okay continue"
+                echo "okay continuing"
              ;;
           esac
         fi
@@ -4940,14 +4982,14 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
           read reply
           case $reply in
              [yY]|[yY][Ee][Ss])
-                echo "okay continue"
+                echo "okay continuing"
              ;;
              [nN]|[nN][Oo])
                 echo "Exiting now"
                 exit 1
              ;;
              *)
-                echo "okay continue"
+                echo "okay continuing"
              ;;
           esac
         fi
@@ -4960,14 +5002,14 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
           read reply
           case $reply in
              [yY]|[yY][Ee][Ss])
-                echo "okay continue"
+                echo "okay continuing"
              ;;
              [nN]|[nN][Oo])
                 echo "Exiting now"
                 exit 1
              ;;
              *)
-                echo "okay continue"
+                echo "okay continuing"
              ;;
           esac
         fi
@@ -4980,14 +5022,14 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
           read reply
           case $reply in
              [yY]|[yY][Ee][Ss])
-                echo "okay continue"
+                echo "okay continuing"
              ;;
              [nN]|[nN][Oo])
                 echo "Exiting now"
                 exit 1
              ;;
              *)
-                echo "okay continue"
+                echo "okay continuing"
              ;;
           esac
         fi
@@ -5000,14 +5042,14 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
           read reply
           case $reply in
              [yY]|[yY][Ee][Ss])
-                echo "okay continue"
+                echo "okay continuing"
              ;;
              [nN]|[nN][Oo])
                 echo "Exiting now"
                 exit 1
              ;;
              *)
-                echo "okay continue"
+                echo "okay continuing"
              ;;
           esac
         fi
