@@ -5248,7 +5248,7 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
     rtrnPkg=""
     rtrnSrc=""
     rtrnCmd=""
-    altFileNames $Section # get the 3 alternative names for the packages in this section
+    altFileNames $Section # get pkg name, src name and command name for each package in this section
     return_val=$?
     if [ $return_val -eq $RETURN_PARAM ]; then
       echo "no ${Section}-files  file found. It should be in $BLFSBUILDFILES"
