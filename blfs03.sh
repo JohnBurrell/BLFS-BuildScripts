@@ -121,14 +121,6 @@ else
   umask 022
 fi
 EOF
-cat > /etc/profile.d/X.sh << "EOF"
-if [ -x /usr/X11R6/bin/X ]; then
-        pathappend /usr/X11R6/bin
-fi
-if [ -d /usr/X11R6/lib/pkgconfig ] ; then
-        pathappend /usr/X11R6/lib/pkgconfig PKG_CONFIG_PATH
-fi
-EOF
 cat > /etc/profile.d/i18n.sh << "EOF"
 # Set up i18n variables
 export LANG=en_US.ISO-8859-1
@@ -318,7 +310,7 @@ set ruler
 " End .vimrc
 EOF
 cat > /etc/issue << "EOF"
-LFS 20120405 \n \l \d
+LFS 20120902 \n \l \d
 EOF
 cat > /etc/shells << "EOF"
 # Begin /etc/shells

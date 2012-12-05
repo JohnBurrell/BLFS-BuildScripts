@@ -20,7 +20,7 @@ RETURN_PARAM=35  # error return
 RETURN_NOTSET=37 #  no dependencies set
 RETURN_DEPNOTMET=39 # package dependency not met
 RETURN_ALLDEPSMET=41 # all dependencies met
-srcrootdir=/blfs-sources
+srcrootdir=/blfs-sources # all source files are under this dir
 blfsBuildFiles=/blfsBuildFiles # location of the pkgs, pkg-order and pkg-dependencies files
 blfsfiles=blfsfiles # name of the subdir to the build files dir
 blfsfilesTar=${blfsfiles}.tar.xz # tar file with files names and dependencies for each section
@@ -36,7 +36,7 @@ cfg=~/BLFS.conf # config file to hold required params
 
 #initialize the config variables
 BLFS_BOOK_LOC_DIR=$HOME/LFS_SVN/$REPO # define local dir for the downloaded book xml
-SVN_URL="svn://svn.linuxfromscratch.org/$REPO/" #svn url
+SVN_URL="svn://svn.linuxfromscratch.org/$REPO/" # svn url
 BOOK_VERSION=$BOOK_VERSION
 SOURCES=$SOURCES
 BOOK=$BOOK
@@ -139,7 +139,7 @@ _edit () {
    elif [ "$tochange" = SOURCES ]; then
      display="download (or) local (if local, must be in ${LFS}${srcrootdir}/${SECTION})"
    elif [ "$tochange" = SECTION ]; then
-     display="options are blfs, security, libraries, genutils, sysutils, programming, networks, server, x, xlibs, gnomeplatform, gnomedesktop, gnomeutils, xfce, browser, xsoftware, multimedia, pst, or ALL"
+     display="options are blfs, security, libraries, genutils, sysutils, programming, networks, server, x, xlibs, gnomeplatform, gnomedesktop, gnomeutils, xfce, browser, office, xsoftware, multimedia, pst, or ALL"
    elif [ "$tochange" = XORG_PREFIX ]; then
      display="Choose the installation prefix for Xorg"
    elif [ "$tochange" = XVERSION ]; then
@@ -204,6 +204,7 @@ _main () {
    esac
 }
 _main
+rm -rf $tempfile1 $tempfile2 $tempfile3 # make sure temp files are removed
 } #end configEdit
 #
 GetAllSections () {
@@ -341,7 +342,7 @@ unset BookPath
 for BookPath in $( find $BLFS_BOOK_LOC_DIR -name index.xml -exec dirname {} ';' )
 do
   if [ -e $BookPath/.svn ]; then #a book exists, check the version
-    if [ $BOOK_VERSION = "Current_Development" -o $BOOK_VERSION = "BOOK" ]; then
+    if [ "$BOOK_VERSION" = Current_Development -o "$BOOK_VERSION" = BOOK ]; then
       version="BOOK"
     else
       version=$BOOK_VERSION
@@ -356,7 +357,7 @@ return $RETURN_PARAM #requested book not present locally
 } #end ChkLocalBookExists
 #
 ChkLocalBookDetails () {
-if [ $BOOK_VERSION = "Current_Development" -o $BOOK_VERSION = "BOOK" ]; then
+if [ "$BOOK_VERSION" = Current_Development -o "$BOOK_VERSION" = BOOK ]; then
   # check the last svn date
   returned_array=( $(LastAccessSvn "$argument") )
   retval=$?
@@ -957,7 +958,7 @@ rtr=(${combine[@]})
 #
 getBuild () {
 local abuild=""
-buildfile=$BLFSBUILDFILES/buildscr
+buildfile=$BLFSBUILDFILES/buildsrc
 if [ ! -e $buildfile ]; then
   return $RETURN_PARAM
 else
@@ -981,7 +982,7 @@ case $1 in
   gnomeplatform|gnomedesktop|gnomeutils)
         xmlsec=gnome
   ;;
-  xsoftware|browser)
+  office|xsoftware|browser)
         xmlsec=xsoft
   ;;
   multimedia)
@@ -1006,7 +1007,7 @@ getComms () {
 local acom=""
 local bcom=""
 local localpkgname=$1
-if [[ "$localpkgname" == ffmpeg || "$localpkgname" == atk ]]; then # avoid gst-ffmpeg which *-ffmpeg matches and avoid at-spi2-atk which *-atk matches
+if [[ "$localpkgname" == ffmpeg || "$localpkgname" == atk ]]; then # avoid at-spi2-atk which *-atk matches
   curfile=${DumpedCommands}/${xmlsec}/???-${commandname}
 else
   if [ -e ${DumpedCommands}/${xmlsec}/*-${commandname} ]; then
@@ -1542,6 +1543,9 @@ else
                    ;;
                 esac
          ;;
+         gunzip*) # unpack a tarball so write it
+                echo ${commandScripts[k]}
+         ;;
          *'/usr/share/doc'*)
                 case ${commandScripts[k]} in
                     *\\) # a continuation line
@@ -1753,6 +1757,40 @@ else
 fi
 } # end Getx264Commands
 #
+ffmpegthumComms () {
+local ffmpegthumcom=""
+ffmpegthumcom[0]="./configure --prefix=/usr"
+ffmpegthumcom[1]="make"
+ffmpegthumcom[2]="make install"
+ffmpegthumRtrn=(${ffmpegthumcom[@]})
+} # end ffmpegthumComms
+#
+GetffmpegthumCommands () {
+# get access to the arrays
+rtrnBuild=""
+getBuild
+return_val=$?
+if [ $return_val -eq $RETURN_PARAM ]; then # no build file present
+  return $RETURN_PARAM
+else
+  buildScripts=(${rtrnBuild[@]})
+  ffmpegthumRtrn=""
+  ffmpegthumComms
+  commandScripts=(${ffmpegthumRtrn[@]})
+  numclines=${#commandScripts[@]}
+  countg=0 # initialize commands counter
+  isPython=false
+  rtr=""
+  combineScripts commandScripts[@] buildScripts[@]
+  scriptOut=(${rtr[@]})
+  for t in "${scriptOut[@]}"
+  do
+    echo $t
+  done
+  return 0
+fi
+} # end GetffmpegthumCommands
+#
 OpenJDKComms () {
 local openjdkcom=""
 openjdkcom[0]="install -v -m755 -d /opt/OpenJDK-1.7.0.5"
@@ -1780,12 +1818,6 @@ openjdkcom[21]="unset dir"
 openjdkcom[22]="unset jar"
 openjdkcom[23]="# End /etc/profile.d/openjdk.sh"
 openjdkcom[24]="EOF"
-openjdkcom[25]='cat >> /etc/man_db.conf << "EOF"'
-openjdkcom[26]="MANDATORY_MANPATH     /opt/OpenJDK/man"
-openjdkcom[27]="MANPATH_MAP           /opt/OpenJDK/bin     /opt/OpenJDK/man"
-openjdkcom[28]="MANDB_MAP             /opt/OpenJDK/man     /var/cache/man/OpenJDK"
-openjdkcom[29]="EOF"
-openjdkcom[30]="mandb -c /opt/OpenJDK/man"
 openjdkRtrn=(${openjdkcom[@]})
 } #end OpenJDKComms
 #
@@ -1929,39 +1961,6 @@ return 0
 fi
 } # end GetPythonModule
 #
-gstPythonComms () {
-local gstPythoncom=""
-gstPythoncom[0]="./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-valgrind"
-gstPythoncom[1]="make"
-gstPythoncom[2]="make install"
-gstPythonRtrn=(${gstPythoncom[@]})
-} # end gstPythonComms
-#
-GetGstPythonCommands () {
-rtrnBuild=""
-getBuild
-return_val=$?
-if [ $return_val -eq $RETURN_PARAM ]; then # no build file present
-  return $RETURN_PARAM
-else
-  buildScripts=(${rtrnBuild[@]})
-  gstPythonRtrn=""
-  gstPythonComms
-  commandScripts=(${gstPythonRtrn[@]})
-  numclines=${#commandScripts[@]}
-  countg=0 # initialize commands counter
-  isPython=false
-  rtr=""
-  combineScripts commandScripts[@] buildScripts[@]
-  scriptOut=(${rtr[@]})
-  for t in "${scriptOut[@]}"
-  do
-    echo $t
-  done
-return 0
-fi
-} # end GetGstPythonCommands
-#
 libcdioComms () {
 local libcdiocom=""
 libcdiocom[0]="./configure --prefix=/usr"
@@ -2095,7 +2094,8 @@ EOF
 delSrcFile () {
 echo "cd \$curdir
 cd ..
-rm -rf \$curdir"
+rm -rf \$curdir
+rm -rf .cache"
 } # end of delSrcFile
 #
 Function () {
@@ -2281,13 +2281,11 @@ echo "cursec=$cursec" >> $Output
       echo "curdir=\$( echo \$PWD )" >> $Output
       case $pkgname in
          avahi|vlc)
-            if $as_root; then
-              echo "source /etc/profile.d/qt.sh
+            echo "source /etc/profile.d/qt.sh
 export PKG_CONFIG_PATH=\$PKG_CONFIG_PATH:/opt/qt/lib/pkgconfig" >> $Output
-            fi
          ;;
          apache-ant)
-            if $as_root; then echo "source /etc/profile.d/openjdk.sh" >> $Output; fi
+            echo "source /etc/profile.d/openjdk.sh" >> $Output
          ;;
       esac
     ;;
@@ -2348,6 +2346,10 @@ case $pkgname in
   cacerts|blfs-btscrpts|$xproto|$xlib|$xapp|$xfont|xterm|firewall)
      : # don't delete any files
   ;;
+  mesalib) # delete the glu dir as well
+     delSrcFile >> $Output
+     echo "rm -rf \$gludir" >> $Output
+  ;;
   *)
      delSrcFile >> $Output
   ;;
@@ -2358,7 +2360,12 @@ echo "${PkgName} $unpacktime $elapsedtime" >> $BuildLog
 EOF
 if ! $as_root; then
 echo "IPS" >> $Output
-resolvelinks
+setuplinks # setup any preprocessing commands - then test doFirst and links
+if [[ ! -z $doFirst || ! -z $links ]]; then resolvelinks; fi # not null
+if [ "$pkgname" = evolution ]; then # write out the functions to get version #
+float_test
+evolutionVersion
+fi
 cat >> $Output << "EOF"
 if [ "$(grep -q ^$PkgName\: /etc/passwd;echo $?)" != 0 ]; then
   if [ "$(grep -q ^install3\: /etc/group;echo $?)" = 0 ]; then # install3 exists
@@ -2391,21 +2398,26 @@ EOF
 case $pkgname in
   apache)
    cat >> $Output << "EOF"
-installpkg $PkgName $cursection 25
+    installpkg $PkgName $cursection 25
 EOF
   ;;
   mysql)
    cat >> $Output << "EOF"
-installpkg $PkgName $cursection 40
+    installpkg $PkgName $cursection 40
 EOF
   ;;
   avahi)
    cat >> $Output << "EOF"
-installpkg $PkgName $cursection 84
+    installpkg $PkgName $cursection 84
+EOF
+  ;;
+  gdm)
+   cat >> $Output << "EOF"
+    installpkg $PkgName $cursection 21
 EOF
   ;;
   *)
-    cat >> $Output << "EOF"
+   cat >> $Output << "EOF"
     installpkg $PkgName $cursection
 EOF
   ;;
@@ -2413,11 +2425,20 @@ esac
 cat >> $Output << "EOF"
 fi
 EOF
-if [[ "$pkgname" == nautilus || "$pkgname" == brasero ]]; then
+if [[ "$pkgname" == nautilus || "$pkgname" == gcr || "$pkgname" == brasero ]]; then
 echo "setMime $pkgname # need to own everything under /usr/share/mime" >> $Output
 fi
+if [[ ! -z $doFirst || ! -z $links ]]; then # preprocessing
 cat >> $Output << "EOF"
 resolvelinks
+EOF
+fi
+if [ "$pkgname" = evolution ]; then
+cat >> $Output << "EOF"
+evolutionVersion
+EOF
+fi
+cat >> $Output << "EOF"
 su $PkgName
 EOF
 case $pkgname in
@@ -2441,7 +2462,7 @@ esac
 cat >> $Output << "EOF"
 ldconfig
 EOF
-echo "chown \$PkgName:\$PkgName \$PkgUserDir/\$PkgName/$build" >> $Output
+echo "chown \$PkgName:\$PkgName \${PkgUserDir}/\${PkgName}/$build" >> $Output
 #
 #set required dirs to be install dirs if installing as a package user 
 #
@@ -2481,6 +2502,8 @@ chmod g+w,o+t /usr/lib/perl5/site_perl/${perlvers}/i686-linux" >> $Output
           cat >> $Output << "EOF"
 chgrp install /usr/share/xml # for iso-codes
 chmod g+w,o+t /usr/share/xml
+chgrp install /usr/share/fontconfig/conf.avail
+chmod g+w,o+t /usr/share/fontconfig/conf.avail
 chgrp install /etc/fonts
 chmod g+w,o+t /etc/fonts
 chgrp install /etc/fonts/conf.d # for xfont
@@ -2549,6 +2572,8 @@ chgrp install /usr/share/glib-2.0/schemas
 chmod g+w,o+t /usr/share/glib-2.0/schemas
 chgrp install /usr/lib/gio/modules # for dconf
 chmod g+w,o+t /usr/lib/gio/modules
+chgrp install /usr/share/bash-completion/completions # for udisks
+chmod g+w,o+t /usr/share/bash-completion/completions
 EOF
     ;;
     libgpg-error)   #/usr/share/common-lisp/source
@@ -2615,10 +2640,22 @@ chgrp install /etc/ssl/certs
 chmod g+w,o+t /etc/ssl/certs
 EOF
     ;;
+    babl) # /usr/share/gtk-doc/html
+          cat >> $Output << "EOF"
+chgrp install /usr/share/gtk-doc/html # for gnutls
+chmod g+w,o+t /usr/share/gtk-doc/html
+EOF
+    ;;
+    openssh)
+          cat >> $Output << "EOF"
+chown root /usr/libexec/ssh-keysign
+chmod 4755 /usr/libexec/ssh-keysign
+EOF
+    ;;
     sudo)
           cat >> $Output << "EOF"
-chown root /usr/bin/sudo # allow x7lib to use sudo to ldconfig
-chmod 4755 /usr/bin/sudo
+chown root /usr/bin/{sudo,sudoedit}
+chmod 4111 /usr/bin/{sudo,sudoedit}
 chown root /usr/lib/sudo/sudoers.so
 chown root /etc/sudoers
 chown root /etc/sudoers.d
@@ -2633,16 +2670,20 @@ EOF
     ;;
     linux-pam)   #/etc/pam.d
           cat >> $Output << "EOF"
-chgrp install /etc/pam.d
+chown linux-pam:install /etc/pam.d
 chmod g+w,o+t /etc/pam.d
 chgrp install /lib/security # for consolekit
 chmod g+w,o+t /lib/security
+chgrp install /etc/security # for libpwquality
+chmod g+w,o+t /etc/security
 EOF
      ;;
-     shadow)  #/bin/su setuid root
+     shadow)  #/bin/su, etc setuid root
            cat >> $Output << "EOF"
 chown root /bin/{su,passwd}
 chmod 4755 /bin/{su,passwd}
+chown root /usr/bin/{chage,chfn,chsh,expiry,gpasswd,newgrp}
+chmod 4755 /usr/bin/{chage,chfn,chsh,expiry,gpasswd,newgrp}
 chgrp install /etc/pam.d/system-session
 chmod 664 /etc/pam.d/system-session # consolekit adds to it
 EOF
@@ -2792,6 +2833,12 @@ chgrp install /usr/share/applications
 chmod g+w,o+t /usr/share/applications
 EOF
      ;;
+     gst-plgns-good0)
+           cat >> $Output << "EOF"
+chgrp install /etc/gconf/schemas
+chmod g+w,o+t /etc/gconf/schemas
+EOF
+     ;;
      dbus)
            cat >> $Output << "EOF"
 chgrp install /usr/lib/dbus-1.0
@@ -2859,8 +2906,8 @@ chown root /usr/bin/pkexec
 chmod 4755 /usr/bin/pkexec
 chown polkitd /etc/polkit-1/rules.d
 chmod 700 /etc/polkit-1/rules.d
-chown polkitd /usr/share/polkit-1/rules.d
-chmod 700 /usr/share/polkit-1/rules.d
+chown polkitd:install /usr/share/polkit-1/rules.d
+chmod 1775 /usr/share/polkit-1/rules.d
 chgrp install /etc/dbus-1 # for dbus
 chmod g+w,o+t /etc/dbus-1
 chgrp install /etc/dbus-1/system.d # for udisks
@@ -2873,6 +2920,14 @@ EOF
      ;;
      gstreamer)
            cat >> $Output << "EOF"
+chgrp install /usr/include/gstreamer-1.0/gst # for plugins
+chmod g+w,o+t /usr/include/gstreamer-1.0/gst
+chgrp install /usr/lib/gstreamer-1.0
+chmod g+w,o+t /usr/lib/gstreamer-1.0
+EOF
+     ;;
+     gstreamer0)
+           cat >> $Output << "EOF"
 chgrp install /usr/include/gstreamer-0.10/gst # for plugins
 chmod g+w,o+t /usr/include/gstreamer-0.10/gst
 chgrp install /usr/lib/gstreamer-0.10
@@ -2881,22 +2936,32 @@ EOF
      ;;
      gst-plgns-base)
            cat >> $Output << "EOF"
+chgrp install /usr/include/gstreamer-1.0/gst/video
+chmod g+w,o+t /usr/include/gstreamer-1.0/gst/video
+chgrp install /usr/share/gst-plugins-base
+chmod g+w,o+t /usr/share/gst-plugins-base
+EOF
+     ;;
+     gst-plgns-base0)
+           cat >> $Output << "EOF"
 chgrp install /usr/include/gstreamer-0.10/gst/interfaces
 chmod g+w,o+t /usr/include/gstreamer-0.10/gst/interfaces
 chgrp install /usr/include/gstreamer-0.10/gst/video
 chmod g+w,o+t /usr/include/gstreamer-0.10/gst/video
 EOF
      ;;
-     libcanberra)
+     gst-plgns-bad)
            cat >> $Output << "EOF"
-chgrp install /etc/gconf/schemas
-chmod g+w,o+t /etc/gconf/schemas
+chgrp install /usr/include/gstreamer-1.0/gst/interfaces
+chmod g+w,o+t /usr/include/gstreamer-1.0/gst/interfaces
 EOF
      ;;
-     gst-plgns-good)
+     libcanberra)
            cat >> $Output << "EOF"
-chgrp install /etc/gconf/schemas
-chmod g+w,o+t /etc/gconf/schemas
+chgrp install /usr/lib/gtk-3.0/modules
+chmod g+w,o+t /usr/lib/gtk-3.0/modules
+chgrp install /usr/share/gdm # for gdm
+chmod g+w,o+t /usr/share/gdm
 EOF
      ;;
      gdk-pixbuf)
@@ -2907,32 +2972,42 @@ EOF
      ;;
      gtkplus3)
            cat >> $Output << "EOF"
+chgrp install /usr/lib/gtk-3.0
+chmod g+w,o+t /usr/lib/gtk-3.0
+chgrp install /usr/lib/gtk-3.0/3.0.0 # for gnome-themes-standard
+chmod g+w,o+t /usr/lib/gtk-3.0/3.0.0
+chgrp install /usr/lib/gtk-3.0/3.0.0/immodules # for ibus
+chmod g+w,o+t /usr/lib/gtk-3.0/3.0.0/immodules
+EOF
+     ;;
+     gtkplus2)
+           cat >> $Output << "EOF"
 chgrp install /usr/share/themes
 chmod g+w,o+t /usr/share/themes
 chgrp install /usr/share/themes/Default
 chmod g+w,o+t /usr/share/themes/Default
 chgrp install /usr/share/themes/Emacs
 chmod g+w,o+t /usr/share/themes/Emacs
-chgrp install /usr/lib/gtk-3.0
-chmod g+w,o+t /usr/lib/gtk-3.0
-chgrp install /usr/lib/gtk-3.0/3.0.0
-chmod g+w,o+t /usr/lib/gtk-3.0/3.0.0
-EOF
-     ;;
-     gtkplus2)
-           cat >> $Output << "EOF"
 chgrp install /usr/lib/gtk-2.0/2.10.0
 chmod g+w,o+t /usr/lib/gtk-2.0/2.10.0
-chgrp install /usr/lib/gtk-2.0/2.10.0/engines # for gtk-engines
+chgrp install /usr/lib/gtk-2.0/2.10.0/engines
 chmod g+w,o+t /usr/lib/gtk-2.0/2.10.0/engines
 chgrp install /usr/lib/gtk-2.0/modules
 chmod g+w,o+t /usr/lib/gtk-2.0/modules
+EOF
+     ;;
+     colord)
+           cat >> $Output << "EOF"
+chgrp install /usr/include/colord-1 # for colord-gtk
+chmod g+w,o+t /usr/include/colord-1
 EOF
      ;;
      vala)
            cat >> $Output << "EOF"
 chgrp install /usr/share/vala
 chmod g+w,o+t /usr/share/vala
+chgrp install /usr/share/vala-0.18/vapi
+chmod g+w,o+t /usr/share/vala-0.18/vapi
 EOF
      ;;
      apache)
@@ -2987,12 +3062,12 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/include/telepathy-1.0
 chmod g+w,o+t /usr/include/telepathy-1.0
-chgrp install /usr/lib/telepathy
-chmod g+w,o+t /usr/lib/telepathy
 EOF
      ;;
      telepathy-logr)
            cat >> $Output << "EOF"
+chgrp install /usr/lib/telepathy # for telepathy-mission-control
+chmod g+w,o+t /usr/lib/telepathy
 chgrp install /usr/share/telepathy/clients
 chmod g+w,o+t /usr/share/telepathy/clients
 EOF
@@ -3033,10 +3108,6 @@ EOF
      ;;
      at-spi2-atk)
            cat >> $Output << "EOF"
-chgrp install /usr/lib/gtk-3.0
-chmod g+w,o+t /usr/lib/gtk-3.0
-chgrp install /usr/lib/gtk-3.0/modules
-chmod g+w,o+t /usr/lib/gtk-3.0/modules
 chgrp install /usr/lib/gnome-settings-daemon-3.0
 chmod g+w,o+t /usr/lib/gnome-settings-daemon-3.0
 chgrp install /usr/lib/gnome-settings-daemon-3.0/gtk-modules
@@ -3086,8 +3157,6 @@ chgrp install /usr/share/icons/gnome
 chmod g+w,o+t /usr/share/icons/gnome
 chgrp install /usr/share/icons/gnome/*
 chmod g+w,o+t /usr/share/icons/gnome/*
-chown libgweather:libgweather /usr/share/icons/gnome/icon-theme.cache
-chmod 644 /usr/share/icons/gnome/icon-theme.cache
 chgrp install /usr/share/icons/gnome/*/status
 chmod g+w,o+t /usr/share/icons/gnome/*/status
 EOF
@@ -3098,12 +3167,6 @@ chgrp install /usr/share/gnome
 chmod g+w,o+t /usr/share/gnome
 chgrp install /usr/share/gnome/help
 chmod g+w,o+t /usr/share/gnome/help
-EOF
-     ;;
-     gnome-serch-tool)
-           cat >> $Output << "EOF"
-chgrp install /etc/gconf/schemas
-chmod g+w,o+t /etc/gconf/schemas
 EOF
      ;;
      gnome-icon-thme)
@@ -3122,16 +3185,32 @@ chgrp install /usr/share/gnome-background-properties
 chmod g+w,o+t /usr/share/gnome-background-properties
 EOF
      ;;
+     vte)
+           cat >> $Output << "EOF"
+chown root.utmp /usr/lib/vte-2.90/gnome-pty-helper
+chmod g+s       /usr/lib/vte-2.90/gnome-pty-helper
+EOF
+     ;;
      yelp-xsl)
            cat >> $Output << "EOF"
 chgrp install /usr/share/yelp-xsl/xslt/common/domains
 chmod g+w,o+t /usr/share/yelp-xsl/xslt/common/domains
 EOF
      ;;
+     ibus)
+           cat >> $Output << "EOF"
+chgrp install /etc/dconf/profile
+chmod g+w,o+t /etc/dconf/profile
+chgrp install /etc/dconf/db
+chmod g+w,o+t /etc/dconf/db
+EOF
+     ;;
      gnome-desktop)
            cat >> $Output << "EOF"
-chgrp install /usr/share/omf
-chmod g+w,o+t /usr/share/omf
+chgrp install /usr/share/help/* # for gnome-user-docs
+chmod g+w,o+t /usr/share/help/*
+chgrp rarian /usr/share/help/rarian.document
+chmod 644 /usr/share/help/rarian.document
 EOF
      ;;
      gtk-engines)
@@ -3166,10 +3245,32 @@ chgrp install /etc/xdg/menus
 chmod g+w,o+t /etc/xdg/menus
 EOF
      ;;
+     gnome-terminal)
+           cat >> $Output << "EOF"
+chgrp install /etc/gconf/schemas
+chmod g+w,o+t /etc/gconf/schemas
+EOF
+     ;;
+     gnome-session)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/gnome-session/sessions
+chmod g+w,o+t /usr/share/gnome-session/sessions
+EOF
+     ;;
      nautilus)
            cat >> $Output << "EOF"
 chgrp install /usr/lib/nautilus
 chmod g+w,o+t /usr/lib/nautilus
+chgrp install /usr/share/gnome-shell
+chmod g+w,o+t /usr/share/gnome-shell
+chgrp install /usr/share/gnome-shell/search-providers
+chmod g+w,o+t /usr/share/gnome-shell/search-providers
+EOF
+     ;;
+     zenity)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/help/{bg,da,en_GB} # for gnome-terminal
+chmod g+w,o+t /usr/share/help/{bg,da,en_GB}
 EOF
      ;;
      file-roller)
@@ -3216,8 +3317,10 @@ EOF
      ;;
      evolution)
            cat >> $Output << "EOF"
-chgrp install /usr/lib/evolution/3.4/plugins
-chmod g+w,o+t /usr/lib/evolution/3.4/plugins
+chgrp install /usr/lib/evolution/$evolVers/plugins
+chmod g+w,o+t /usr/lib/evolution/$evolVers/plugins
+chgrp install /usr/share/help/mk
+chmod g+w,o+t /usr/share/help/mk
 EOF
      ;;
      gnome-panel)
@@ -3226,12 +3329,8 @@ chgrp install /usr/lib/gnome-applets
 chmod g+w,o+t /usr/lib/gnome-applets
 chgrp install /usr/share/gnome-panel/4.0/applets
 chmod g+w,o+t /usr/share/gnome-panel/4.0/applets
-EOF
-     ;;
-     gnm-power-mngr)
-           cat >> $Output << "EOF"
-chgrp install /usr/lib/nautilus-sendto/plugins
-chmod g+w,o+t /usr/lib/nautilus-sendto/plugins
+chgrp install /usr/share/help/{pt,th,zh_HK,zh_TW}
+chmod g+w,o+t /usr/share/help/{pt,th,zh_HK,zh_TW}
 EOF
      ;;
      gnome-shell)
@@ -3244,10 +3343,6 @@ EOF
      ;;
      gnome-games)
            cat >> $Output << "EOF"
-chgrp install /usr/share/help/pl
-chmod g+w,o+t /usr/share/help/pl
-chgrp install /usr/share/help/ro
-chmod g+w,o+t /usr/share/help/ro
 chgrp install /usr/share/help/tr
 chmod g+w,o+t /usr/share/help/tr
 EOF
@@ -3298,6 +3393,16 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/lib/gnome-bluetooth/plugins
 chmod g+w,o+t /usr/lib/gnome-bluetooth/plugins
+chgrp install /usr/share/help/ro
+chmod g+w,o+t /usr/share/help/ro
+EOF
+     ;;
+     gdm)
+           cat >> $Output << "EOF"
+usermod -a -G audio gdm
+usermod -a -G video gdm
+sed -i 's/id:3:initdefault:/id:5:initdefault:/' \
+    /etc/inittab
 EOF
      ;;
      libxfce4util)
@@ -3377,12 +3482,18 @@ chmod 666 /srv/named/dev/{null,random}
 EOF
      ;;
 esac
-fi # end as_root
-# these are needed whether root or package user
+fi # end ! as_root
+# most of these are needed whether root or package user
 case $pkgname in
-    linux-pam)   #/etc/pam.d
+    openssl) # install /etc/pam.d for linux-pam
           cat >> $Output << "EOF"
 install -v -m755 -d /etc/pam.d
+EOF
+    ;;
+    linux-pam)   #/etc/pam.d
+          cat >> $Output << "EOF"
+chown root /sbin/unix_chkpwd
+chmod -v 4755 /sbin/unix_chkpwd
 cat > /etc/pam.d/other << "PAMEND"
 # Begin /etc/pam.d/other
 auth            required        pam_unix.so     nullok
@@ -3392,7 +3503,23 @@ password        required        pam_unix.so     nullok
 # End /etc/pam.d/other
 PAMEND
 EOF
-     ;;
+    ;;
+    cracklib)
+          cat >> $Output << "EOF"
+create-cracklib-dict /usr/share/dict/cracklib-words \
+                     /usr/share/dict/cracklib-extra-words
+EOF
+    ;;
+    openjdk) # update man_db.conf
+          cat >> $Output << "EOF"
+cat >> /etc/man_db.conf << "MANDBEOF"
+MANDATORY_MANPATH     /opt/OpenJDK/man
+MANPATH_MAP           /opt/OpenJDK/bin     /opt/OpenJDK/man
+MANDB_MAP             /opt/OpenJDK/man     /var/cache/man/OpenJDK
+MANDBEOF
+mandb -c /opt/OpenJDK/man
+EOF
+    ;;
     apache-ant)
           cat >> $Output << "EOF"
 cat > /etc/profile.d/apache_ant.sh << "EOFANT"
@@ -3509,14 +3636,6 @@ export XDG_CONFIG_DIRS=/etc/xdg
 EOW
 EOF
      ;;
-     gnome-games)
-           cat >> $Output << "EOF"
-groupadd -fg 60 games
-useradd -c 'Games High Score Owner' -d /var/games \
-      -g games -s /bin/false -u 60 games
-chown -v games:games /var/games
-EOF
-     ;;
      xfce4-session)
            cat >> $Output << "EOF"
 echo "exec dbus-launch --exit-with-session xfce4-session" > ~/.xinitrc
@@ -3542,7 +3661,7 @@ cat >> $Output << "EOF"
 EOF
 } #end closefunction
 #
-resolvelinks () { # the following files will be owned by the package user
+setuplinks () { # setup preprocessing
 case $pkgname in
     openssh)
         doFirst="install -v -m700 -d /var/lib/sshd && chown -v root:sys /var/lib/sshd && groupadd -g 50 sshd && useradd -c 'sshd PrivSep' -d /var/lib/sshd -g sshd -s /bin/false -u 50 sshd"
@@ -3552,8 +3671,8 @@ case $pkgname in
         doFirst="if [ -e /usr/lib/python2.7/site-packages/talloc.so ]; then chown talloc:talloc /usr/lib/python2.7/site-packages/talloc.so; fi"
         links=""
     ;;
-    apache-ant) # make sure JAVA_HOME is set
-        doFirst="source /etc/profile.d/openjdk.sh"
+    dbus)
+        doFirst='groupadd -g 18 messagebus && useradd -c "D-Bus Message Daemon User" -d /var/run/dbus -u 18 -g messagebus -s /bin/false messagebus'
         links=""
     ;;
     alsa-utils)
@@ -3569,15 +3688,11 @@ case $pkgname in
         links=""
     ;;
     cups-filters)
-        doFirst="rm /usr/share/cups/mime"
+        doFirst="if [ -e /usr/share/cups/mime ]; then rm /usr/share/cups/mime; fi"
         links=""
     ;;
-    gcr)
-        doFirst="if [ -e /usr/share/mime/packages/gcr-crypto-types.xml ]; then rm /usr/share/mime/packages/gcr-crypto-types.xml; fi"
-        links="/usr/share/glib-2.0/schemas/gschemas.compiled"
-    ;;
     avahi)
-        doFirst="groupadd -fg 86 netdev && chgrp install /usr/share/applications && chmod 1775 /usr/share/applications"
+        doFirst="groupadd -fg 86 netdev"
         links=""
     ;;
     firewall)
@@ -3612,31 +3727,35 @@ case $pkgname in
         doFirst=""
         links="/usr/share/info/dir"
     ;;
-    gtkplus3|gst-plgns-bad|at-spi2-atk|telepathy-logr|dconf|libgnomekbd|gset-dsktp-schms|caribou|gnome-keyring|gnome-session|yelp|mutter|gnome-shell)
+    gst-plgns-bad|gst-plgns-bad0|at-spi2-atk|telepathy-logr|dconf|libgnomekbd|gset-dsktp-schms|caribou|gnome-keyring|yelp|mutter|gnome-shell|ibus|gdm)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    gnome-set-daemon|evol-data-server|metacity|tpthymisscntrl|brasero|epiphany|gcalctool|gnome-contacts|eog|gnome-dictionary|gvfs|gnome-games)
+    gnome-set-daemon|evol-data-server|folks|metacity|tpthymisscntrl|epiphany|gcalctool|gnome-contacts|gnome-dictionary)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    gnm-power-mngr|gnome-sys-monitr|gnome-scrnshot|gnome-system-log|gucharmap|mousetweaks|vino|gedit|epiphany-ext)
+    gnm-power-mngr|gnome-sys-monitr|gnome-scrnshot|gucharmap|mousetweaks|vino|gedit|epiphany-ext)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    gst-plgns-good|aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool|libpeas|totem)
+    gst-plgns-good|aisleriot|file-roller|evince|gnome-applets|gnome-panel|evolution|ntwrk-mngr-applt|empathy|gnome-nettool|libpeas|totem|libgweather|gcr|goa|gnome-session)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /etc/gconf/gconf.xml.defaults/* /usr/share/icons/hicolor/icon-theme.cache"
+    ;;
+    gconf|gvfs)
+        doFirst=""
+        links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/lib/gio/modules/giomodule.cache"
     ;;
     nautilus-sendto)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/lib/nautilus-sendto/plugins/{libnstburn.la,libnstburn.so,libnstgajim.la,libnstgajim.so,libnstpidgin.la,libnstpidgin.so,libnstremovable_devices.la,libnstremovable_devices.so} /usr/bin/nautilus-sendto"
     ;;
-    gtkplus2) # has to own /usr/bin/gtk-update-icon-cache
+    gtkplus3) # has to own /usr/bin/gtk-update-icon-cache
         doFirst=""
-        links="/usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
+        links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
     ;;
-    nautilus|gnome-bluetooth|baobab|alacarte)
+    nautilus|gnome-bluetooth|gnm-user-share|gnome-cntrl-cntr|baobab|alacarte|brasero|cheese|eog|gnome-disk-util|gnome-serch-tool|gnome-system-log)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/share/icons/hicolor/icon-theme.cache"
     ;;
@@ -3654,9 +3773,9 @@ case $pkgname in
     ;;
     farstream)
         doFirst=""
-        links="/usr/lib/gstreamer-0.10/{libfsrawconference.*,libfsrtpconference.*,libfsmsnconference.*,libfsfunnel.*,libfsrtcpfilter.*,libfsvideoanyrate.*}"
+        links="/usr/lib/gstreamer-1.0/{libfsrawconference.*,libfsrtpconference.*,libfsmsnconference.*,libfsfunnel.*,libfsrtcpfilter.*,libfsvideoanyrate.*}"
     ;;
-    libcanberra|gnome-serch-tool|libgweather|gnome-terminal)
+    libcanberra|gnome-terminal)
         doFirst=""
         links="/etc/gconf/gconf.xml.defaults/*"
     ;;
@@ -3664,15 +3783,22 @@ case $pkgname in
         doFirst=""
         links="/usr/share/icons/gnome/icon-theme.cache"
     ;;
-    gnome-session|gnome-panel|brasero|eog|accerciser|xfce4-session)
+    accerciser|gnome-tweak-tool|xfce4-session)
         doFirst=""
         links="/usr/share/icons/hicolor/icon-theme.cache"
     ;;
+    gnome-games)
+        doFirst='install -v -m755 -d /var/games && groupadd -g 60 games && useradd -c "Games High Score Owner" -d /var/games -g games -s /bin/false -u 60 games && chown -v games:games /var/games'
+        links="/usr/share/glib-2.0/schemas/gschemas.compiled"
+    ;;
     *)
-        diFirst=""
+        doFirst=""
         links=""
     ;;
 esac
+} # end setuplinks
+#
+resolvelinks() {
 echo "resolvelinks () {
 $doFirst
 for link in $links
@@ -3744,8 +3870,14 @@ cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}*.*z* | awk -F\/ 'END{print $1}')
 EOF
     ;;
-    MesaLib-) # extracts to Mesa-xxx not MesaLib
+    MesaLib-) # download the glu src and extract to Mesa-xxx not MesaLib
     cat << "EOF"
+glusrc="glu-9.0.0.tar.bz2"
+gludir="glu-9.0.0"
+if [ ! -e $glusrc ]; then
+wget ftp://ftp.freedesktop.org/pub/mesa/glu/${glusrc}
+fi
+tar xf $glusrc
 cp ${sourcedir}/${SrcName}*.* .
 tar xf ${SrcName}*.tar.*z*
 cd Mesa-*
@@ -3781,6 +3913,24 @@ fi
 cd $(tar vxf $x264src | awk -F\/ 'END{print $1}')
 EOF
    ;;
+    pyxdg-) # wget the source file
+    cat << "EOF"
+pyxdgsrc="pyxdg-0.24.tar.gz"
+if [ ! -e $pyxdgsrc ]; then
+wget http://people.freedesktop.org/~takluyver/${pyxdgsrc}
+fi
+cd $(tar vxf $pyxdgsrc | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   ffmpegthumbnailer-) # get the source file
+    cat << "EOF"
+ffmpegthumsrc="ffmpegthumbnailer-2.0.8.tar.gz"
+if [ ! -e $ffmpegthumsrc ]; then
+wget http://ffmpegthumbnailer.googlecode.com/files/${ffmpegthumsrc}
+fi
+cd $(tar vxf $ffmpegthumsrc | awk -F\/ 'END{print $1}')
+EOF
+   ;;
    polkit-|dbus-|glib-|freetype-|docbook-xsl-|poppler-|git-|cracklib-) # not polkit-gnome, dbus-glib, glibmm, freetype-doc, cracklib-words, git manpages and htmldocs
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
@@ -3813,13 +3963,14 @@ fi
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   gst-python-)
+   mysql-) # wget the docs (single html)
     cat << "EOF"
-gstpythonSrc=gst-python-0.10.22.tar.bz2
-if [ ! -e $gstpythonSrc ]; then
-wget http://gstreamer.freedesktop.org/src/gst-python/${gstpythonSrc}
+cp ${sourcedir}/${SrcName}*.* .
+mysqlManual=refman-5.5-en.html.tar.gz
+if [ ! -e $mysqlManual ]; then
+wget -O $mysqlManual http://downloads.mysql.com/docs/${mysqlManual}
 fi
-cd $(tar vxf $gstpythonSrc | awk -F\/ 'END{print $1}')
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    libcdio-)
@@ -3870,6 +4021,12 @@ EOF
 cp ${sourcedir}/${SrcName}*.* .
 rm -rf ${SrcName}*-bin*
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   libreoffice) # need --no-overwrite-dir when untaring
+    cat << "EOF"
+cp ${sourcedir}/${SrcName}*.* .
+cd $(tar vxf ${SrcName}*.tar.*z* --no-overwrite-dir | awk -F\/ 'END{print $1}')
 EOF
    ;;
    *) # tar.xz,gz,bz2,tgz
@@ -3938,6 +4095,7 @@ case $pkgname in
     libdaemon)
         GetCommands \
         | sed -e '/make -C doc doxygen/d' \
+              -e '/install -v -m644 doc\/reference\/man/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4102,9 +4260,15 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    cracklib)
+       GetCommands \
+        | sed -e '/create-cracklib-dict/,/\/usr\/share\/dict\/cracklib-extra-words/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     linux-pam) 
        GetCommands \
-        | sed -e 's/\/sbin\/security\/unix_chkpwd/\/sbin\/unix_chkpwd/' \
+        | sed -e '/chmod -v 4755 \/sbin\/unix_chkpwd/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4251,7 +4415,7 @@ case $pkgname in
        if ! $as_root; then
          GetCommands \
           | sed -e '/groupadd/,/-u 18 -g messagebus/d' \
-                -e '/make distclean/,/make install-dbus/d' \
+                -e '/make distclean/,/kill \$DBUS_SESSION_BUS_PID/d' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
@@ -4260,6 +4424,13 @@ case $pkgname in
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        fi
+    ;;
+    gpm)
+       GetCommands \
+        | sed -e '/chmod   -v   755    doc\/support/,/End \/etc\/sysconfig\/mouse/d' \
+              -e '/EOF/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
     ;;
     udev)
        rtrnCom="" # need the version of udev used in the book commands
@@ -4328,7 +4499,7 @@ print $0
         GetXCommands \
         | sed -e 's/bash -e/set -e/' \
               -e '/for package in/ i cd $cursec' \
-              -e 's/\$AS_ROOT //' \
+              -e 's/as_root make install/make install/' \
               -e '/exit/d' \
               -e 's/\(.*\)&&$/\1/' \
        >> $Output
@@ -4337,7 +4508,8 @@ print $0
         GetXCommands \
         | sed -e 's/bash -e/set -e/' \
               -e '/for package in/ i cd $cursec' \
-              -e 's/\$AS_ROOT //' \
+              -e 's/as_root make install/make install/' \
+              -e '/as_root \/sbin\/ldconfig/d' \
               -e '/exit/d' \
               -e '/ln -sv \$XORG_PREFIX/d' \
               -e 's/\(.*\)&&$/\1/' \
@@ -4357,12 +4529,10 @@ print $0
         >> $Output
     ;;
     mesalib)
-        GetCommands \
-         | sed -e "/make install/ i sed -i 's/\$(INSTALL) -v -d -m755 \$(DESTDIR)\$(INSTALL_DIR)\\\/bin/test ! -z \$(DESTDIR)\$(INSTALL_DIR)\\\/bin || \$(INSTALL) -v -d -m755 \$(DESTDIR)\$(INSTALL_DIR)\\\/bin/' xdemos\/Makefile" \
-               -e '/cp -rv docs/ a if [ "$XORG_PREFIX" != "/usr" ]; then' \
-               -e '/HEADER \/usr\/include/{N;s/HEADER \/usr\/include\ndone/HEADER \/usr\/include\ndone\nfi/}' \
-               -e 's/\(.*\)&&$/\1/' \
-        >> $Output
+         GetCommands \
+          | sed -e '/\.\/configure --prefix=\/usr --disable-static/i cd \.\.\/glu*' \
+                -e 's/\(.*\)&&$/\1/' \
+         >> $Output
     ;;
     db)
        if ! $as_root; then
@@ -4405,12 +4575,14 @@ print $0
           | sed -e '/groupadd/,/useradd/d' \
                 -e '/SEGMENTS="Client ManPages SharedLibraries"/,/unset SEGMENTS/d' \
                 -e '/mysql_install_db/,/make install-mysql/d' \
+                -e "/sed -i/ a install -v -m0755 -d \/usr\/share\/doc\/mysql-${mysqlvers}\ninstall -v -m644 ..\/..\/refman-5.5-en.html.tar.gz \/usr\/share\/doc\/mysql-${mysqlvers}\ntar xvf \/usr\/share\/doc\/mysql-${mysqlvers}\/refman-5.5-en.html.tar.gz" \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
          GetCommands \
           | sed -e '/SEGMENTS="Client ManPages SharedLibraries"/,/unset SEGMENTS/d' \
                 -e '/mysql_install_db/,/make install-mysql/d' \
+                -e "/sed -i/ a install -v -m0755 -d \/usr\/share\/doc\/mysql-${mysqlvers}\ninstall -v -m644 ..\/..\/refman-5.5-en.html.tar.gz \/usr\/share\/doc\/mysql-${mysqlvers}\ntar xvf \/usr\/share\/doc\/mysql-${mysqlvers}\/refman-5.5-en.html.tar.gz" \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        fi
@@ -4457,13 +4629,12 @@ print $0
     ;;
     ffmpeg)
        GetCommands \
-        | sed -e '/usr\/share\/doc\/ffmpeg/d' \
-              -e 's/..\/tools\/qt-faststart.c/tools\/qt-faststart.c/' \
+        | sed -e '/export LIBRARY_PATH/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
-    gst-python)
-        GetGstPythonCommands >> $Output
+    ffmpegthumnaler)
+       GetffmpegthumCommands >> $Output
     ;;
     libtheora)
        GetCommands \
@@ -4522,6 +4693,7 @@ print $0
     docbook-xsl)
        GetCommands \
         | sed -e '/tar -xf/d' \
+              -e '/install -v -m644 -D README/ i install -v -d \/usr\/share\/doc\/docbook-xsl-1.77.1' \
               -e '/cp -v -R doc/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -4559,8 +4731,8 @@ print $0
     webkitgtk)
        if [ "$GNOME_OR_XFCE" = xfce ]; then
          GetCommands \
-          | sed -e "/sed -i 's\#=GST\#=\$GST\#' configure/d" \
-                -e 's/introspection/introspection --disable-geolocation --with-gtk=2.0/' \
+          | sed -e 's/--with-gstreamer=1.0/--with-gstreamer=0.10/' \
+                -e 's/introspection/introspection --disable-geolocation --enable-gtk=2.0 --disable-webkit2/' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
@@ -4663,16 +4835,36 @@ print $0
        fi
     ;;
     gnome-games)
-       GetCommands \
-        | sed -e '/groupadd/,/chown/d' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
+       if ! $as_root; then
+         GetCommands \
+          | sed -e '/install -v/,/chown/d' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
     ;;
     evolution)
        GetCommands \
         | sed -e 's/disable-contact-maps/with-clutter/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
+    ;;
+    gdm)
+       if ! $as_root; then
+         GetCommands \
+          | sed -e '/groupadd/,/usermod -a -G video/d' \
+                -e '/make install-gdm/,/\/etc\/inittab/d' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e '/make install-gdm/d' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       fi
     ;;
     gimp)
        GetCommands \
@@ -4716,6 +4908,12 @@ print $0
     llvm)
        GetCommands \
         | sed -e '/--enable-optimized/ i  --disable-docs \\' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    libreoffice)
+       GetCommands \
+        | sed -e '/tar -xf libreoffice/,/cd libreoffice/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4914,8 +5112,9 @@ if [ ! -e $pkgFiles ]; then
 fi
 while read aline
 do
-  case $aline in
-     *$pkgToTest*)
+pkg_is=$(echo $aline | awk -F= '{print $1}')
+  case $pkg_is in
+     $pkgToTest)
           return 0
      ;;
   esac
@@ -4966,6 +5165,19 @@ else
 fi
 } # end min2
 #
+# Return the value of an operation e.g addition: z=$(float_val "$x + $y")
+float_val () {
+     echo | awk 'END { print '"$1"'; }'
+}
+#
+# Return status code of a comparison e.g. float_test "$x > $y" && num=$x
+# or float_test "$x < $y" && num=$y to find greater of two floating point numbers
+float_test () {
+echo "float_test () {
+     echo | awk 'END { exit ( !( '\"\$1\"')); }'
+}" >> $Output
+}
+#
 Start () {
 declare -a PkgName=("${!2}")
 declare -a SrcName=("${!3}")
@@ -4984,8 +5196,10 @@ Getxmlsec $Section
 if [[ "$Section" == x ]]; then SetXorgVars; fi
 REPODIR=${BLFS_BOOK_LOC_DIR}/$version
 Header
-if ! $as_root; then pkguser; fi # need it if installing as a package user
-numcharInstall
+if ! $as_root; then
+  pkguser # need it if installing as a package user
+  numcharInstall
+fi
 if [ "$Section" != blfs ]; then
   PkgDepend
   testDeps
@@ -4993,7 +5207,7 @@ fi
 if [[ "$Section" = networks || "$Section" = sysutils || "$Section" = xlibs || "$Section" = multimedia ]]; then
   delElementPattern
 fi
-if [[ "$Section" == gnomedesktop || "$Section" == gnomeutils ]]; then
+if [[ "$Section" == gnomeplatform || "$Section" == gnomedesktop || "$Section" == gnomeutils ]]; then
   setMime
 fi
 numpkgs=${#PkgName[@]}
@@ -5087,71 +5301,48 @@ sed -e '/make check/d' \
     -i $fpkgnme
 } # end Start
 #
-GetudevVersion () {
-udevloc="${LFS}${PKGUSERDIR}/core/udev"
-fnd=$( ls -l $udevloc | grep systemd-[0-9]*.tar.*z* | awk '{print $NF}' )
+GetPkgVersion () {
+# $1 is the location of the src package
+# $2 is the name of the package
+# $3 is the name to trim against - usually tar
+local pkgloc=$1
+local pkgnm=$2
+local trim=$3
+local fnd
+local fileExt
+local pkgvers=""
+fnd=$( ls -l $pkgloc | grep ${pkgnm}-[0-9].*.tar.*z* | awk '{print $NF}' )
 fileExt="${fnd#*-}"
-udevvers="${fileExt%.tar*}"
-} # end GetudevVersion
+pkgvers="${fileExt%.${trim}*}"
+rtrvers=($pkgvers)
+} # end GetPkgVersion
 #
 udevXBookVers () {
-# the line to parse for the version is $1
+# $1 the command to parse for the version #
 fileis=$(echo $1 | awk -F\/ '{print $2}')
 fExt="${fileis#*lfs-}"
 udevXbookvers="${fExt%.tar*}"
 } # end udevXBookVers
 #
-GetPerlVersion () {
-perlloc="${LFS}${PKGUSERDIR}/core/perl"
-pnd=$( ls -l $perlloc | grep perl-[0-9].*.tar.*z* | awk '{print $NF}' )
-fleExt="${pnd#*-}"
-perlvers="${fleExt%.tar*}"
-} # end GetPerlVersion
-#
-GetFreetypeVersion () {
-freetypeloc="${LFS}${srcrootdir}/libraries"
-freefnd=$( ls -l $freetypeloc | grep freetype-[0-9].*.tar.*z* | awk '{print $NF}' )
-freetypeExt="${freefnd#*-}"
-freetypevers="${freetypeExt%.tar*}"
-} # end GetFreetypeVersion
-#
-GetPythonVersion () {
-Pythonloc="${LFS}${srcrootdir}/programming"
-Pyfnd=$( ls -l $Pythonloc | grep Python-[0-9].*.tar.*z* | awk '{print $NF}' )
-PythonExt="${Pyfnd#*-}"
-Pythonvers="${PythonExt%.tar*}"
-} # end GetPythonVersion
-#
-GetphpVersion () {
-phploc="${LFS}${srcrootdir}/programming"
-phpfnd=$( ls -l $phploc | grep php-[0-9].*.tar.*z* | awk '{print $NF}' )
-phpExt="${phpfnd#*-}"
-phpvers="${phpExt%.tar*}"
-} # GetphpVersion
-#
 phpXBookVers () {
-# parse $1 for the version #
+# $1 the command to parse for the version #
 fileis=$(echo $1 | awk -F\/ '{print $5}')
 phpXbookvers="${fileis#php-}"
 } # end phpXBookVers
 #
-GetFirefoxVersion () {
-firefoxloc="${LFS}${srcrootdir}/browser"
-if [ -d $firefoxloc ]; then
-  : # okay, so continue
-else
-  firefoxloc="${LFS}${PKGUSERDIR}/browser/firefox"
-  if [ -d $firefoxloc ]; then
-    : # okay, so continue
-  else
-    return $RETURN_PARAM
-  fi
+evolutionVersion () {
+echo "evolutionVersion () {
+baseval=0.0 # assume version # will be > 0
+evoldir="/usr/lib/evolution"
+for evers in \${evoldir}/*; do # loop through all files in the directory
+evoltest=\$( echo \$evers | awk -F\/ '{print \$NF}' )
+if [[ \"\$evoltest\" =~ ^[0-9]+([.][0-9]+)?$ ]]; then # a number so test its value
+  float_test \"\$evoltest > \$baseval\" && evolVers=\$evoltest
+  baseval=\$evolVers
 fi
-ffnd=$( ls -l $firefoxloc | grep firefox-[0-9].*.tar.*z* | awk '{print $NF}' )
-ffoxExt="${ffnd#*-}"
-ffoxvers="${ffoxExt%.source*}"
-return 0
-} # end GetFirefoxVersion
+done
+}" >> $Output
+} # end evolutionVersion
 #
 # ***main program***  - call the functions
 #
@@ -5268,7 +5459,12 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
     fi
 # check all requested src files are present
     if [[ "$Section" != browser ]]; then
-      ChkSrcPresent ${SOURCEDIR}/${Section} ${SOURCEDIR}/${Section}/${WgetList}
+      if [ -e ${SOURCEDIR}/${Section}/${WgetList} ]; then
+        ChkSrcPresent ${SOURCEDIR}/${Section} ${SOURCEDIR}/${Section}/${WgetList}
+      else
+         echo "No wget-list file in ${SOURCEDIR}/${Section}"
+         echo "Cannot check presence of source files"
+      fi
       ret_val=$?
       if [ $ret_val -eq $RETURN_PARAM ]; then 
         echo "not all requested files in ${SOURCEDIR}/${Section}/${WgetList} have been downloaded"
@@ -5302,46 +5498,98 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
     if [ "$Section" = browser ]; then
       if [ "$BROWSER" = firefox ]; then
         if [ -z $ffoxvers ]; then # null, so fill
-          GetFirefoxVersion
-          ret_val=$?
-          if [ $ret_val -eq $RETURN_PARAM ]; then
-            echo "Requested Firefox version but cannot find source location"
-            echo "Modify this code to include proper source location"
-            echo "Exiting now"
-            exit 1
-          fi     
-        fi     
+          firefoxloc="${LFS}${srcrootdir}/browser"
+          if [ -d $firefoxloc ]; then
+            : # okay, so continue
+          else
+            firefoxloc="${LFS}${PKGUSERDIR}/browser/firefox"
+            if [ -d $firefoxloc ]; then
+              : # okay, so continue
+            else
+              echo "Requested Firefox version but cannot find source location"
+              echo "Modify this code to include proper source location"
+              echo "Exiting now"
+              exit 1
+            fi           
+          fi
+          rtrvers=""
+          GetPkgVersion $firefoxloc firefox source
+          ffoxvers=$rtrvers
+          echo "Firefox version is $ffoxvers"
+        fi
       fi
     fi
     if ! $single_package; then
       case $Section in
         sysutils)
-          GetudevVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/udev systemd tar # for udev version
+          udevvers=$rtrvers
+          echo "udev version is $udevvers"
         ;;
         libraries)
-          GetPerlVersion
-          GetFreetypeVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/perl perl tar
+          perlvers=$rtrvers
+          echo "perl version is $perlvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/libraries freetype tar
+          freetypevers=$rtrvers
+          echo "freetype version is $freetypevers"
         ;;
         programming)
-          GetPerlVersion
-          GetphpVersion
-          GetPythonVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/perl perl tar
+          perlvers=$rtrvers
+          echo "perl version is $perlvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming php tar
+          phpvers=$rtrvers
+          echo "php version is $phpvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming Python tar
+          Pythonvers=$rtrvers
+          echo "Python version is $Pythonvers"
         ;;
+        server)
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/server mysql tar
+          mysqlvers=$rtrvers
+          echo "mysql version is $mysqlvers"
+      ;;
       esac
     else
       case $SINGLE_PACKAGE in
         udev)
-          GetudevVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/udev systemd tar
+          udevvers=$rtrvers
+          echo "udev version is $udevvers"
         ;;
         freetype)
-          GetFreetypeVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/libraries freetype tar
+          freetypevers=$rtrvers
+          echo "freetype version is $freetypevers"
         ;;
         php)
-          GetphpVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming php tar
+          phpvers=$rtrvers
+          echo "php version is $phpvers"
         ;;
         python)
-          GetPythonVersion
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming Python tar
+          Pythonvers=$rtrvers
+          echo "Python version is $Pythonvers"
         ;;
+      mysql)
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/server mysql tar
+          mysqlvers=$rtrvers
+          echo "mysql version is $mysqlvers"
+      ;;
       esac
     fi
     Start $Section rtrnPkg[@] rtrnSrc[@] rtrnCmd[@] # build the script for this section
