@@ -50,7 +50,6 @@
 ./sysutils.sh # for ibus - completes all specified packages
 ./xlibs.sh # for webkitgtk
 ./gnomedesktop.sh
-./xlibs.sh # for notification daemon - completes all specified packages
 ./gnomeplatform.sh # completes all specified packages
 ./gnomedesktop.sh  # completes all specified packages
 ./gnomeutils.sh # completes all specified packages
