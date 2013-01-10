@@ -25,6 +25,7 @@ In the book the blfs-bootscripts are usually installed immediately after a packa
 
 blfsa is fairly large so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site - thanks.
 
+Release2.3 - updates to keep pace with changes to the BLFS book
 Release2.2 - general updates to the BLFS book
 Release2.0 - The way xorg is installed has changed in the book.
 Release1.9 - general updates to keep pace with changes in the book.
