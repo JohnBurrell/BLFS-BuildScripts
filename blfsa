@@ -783,6 +783,12 @@ if [ ! -d $BLFSBUILDFILES ]; then
       return $RETURN_PARAM
     fi
   fi
+  chmod 755 $BLFSBUILDFILES
+else # test if blfsfilesTar is present
+  if [ -e ${LFS}/${blfsfilesTar} ]; then
+    echo "**Warning** - $blfsfilesTar present but not used because $BLFSBUILDFILES exists."
+    echo "If you want to use $blfsfilesTar then delete the $blfsBuildFiles directory."
+  fi
 fi
 return 0
 } # end GetBLFSfiles
@@ -1977,6 +1983,61 @@ return 0
 fi
 } # end GetBasicCommands
 #
+systemdloginComms () {
+local systemdlogincom=""
+systemdlogincom[0]="./configure --prefix=/usr \\"
+systemdlogincom[1]="            --sysconfdir=/etc \\ "
+systemdlogincom[2]="            --localstatedir=/var \\"
+systemdlogincom[3]="            --disable-selinux \\"
+systemdlogincom[4]="            --disable-xz \\"
+systemdlogincom[5]="            --disable-tcpwrap \\"
+systemdlogincom[6]="            --disable-pam \\"
+systemdlogincom[7]="            --disable-acl \\"
+systemdlogincom[8]="            --disable-audit \\"
+systemdlogincom[9]="            --disable-libcryptsetup \\"
+systemdlogincom[10]="            --disable-binfmt \\"
+systemdlogincom[11]="            --disable-vconsole \\"
+systemdlogincom[12]="            --disable-readahead \\"
+systemdlogincom[13]="            --disable-quotacheck \\"
+systemdlogincom[14]="            --disable-randomseed \\"
+systemdlogincom[15]="            --disable-hostnamed \\"
+systemdlogincom[16]="            --disable-timedated \\"
+systemdlogincom[17]="            --disable-localed \\"
+systemdlogincom[18]="            --disable-coredump \\"
+systemdlogincom[19]="            --disable-manpages \\"
+systemdlogincom[20]="            --disable-gtk \\"
+systemdlogincom[21]="            --disable-static \\"
+systemdlogincom[22]="            --with-distro=other"
+systemdlogincom[23]="make"
+systemdlogincom[24]="make install"
+systemdloginRtrn=(${systemdlogincom[@]})
+} # end systemdloginComms
+#
+GetsystemdloginCommands () {
+rtrnBuild=""
+getBuild
+return_val=$?
+if [ $return_val -eq $RETURN_PARAM ]; then # no build file present
+  return $RETURN_PARAM
+else
+  buildScripts=(${rtrnBuild[@]})
+  systemdloginRtrn=""
+  systemdloginComms
+  commandScripts=(${systemdloginRtrn[@]})
+  numclines=${#commandScripts[@]}
+  countg=0 # initialize commands counter
+  isPython=false
+  rtr=""
+  combineScripts commandScripts[@] buildScripts[@]
+  scriptOut=(${rtr[@]})
+  for t in "${scriptOut[@]}"
+  do
+    echo $t
+  done
+return 0
+fi
+} # end GetsystemdloginCommands
+#
 foomaticComms () {
 local foomaticcom=""
 foomaticcom[0]="./configure --prefix=/usr --sysconfdir=/etc --enable-dbus"
@@ -2452,11 +2513,6 @@ cat >> $Output << "EOF"
 resolvelinks
 EOF
 fi
-if [ "$pkgname" = evolution ]; then
-cat >> $Output << "EOF"
-evolutionVersion
-EOF
-fi
 cat >> $Output << "EOF"
 su $PkgName
 EOF
@@ -2482,6 +2538,12 @@ cat >> $Output << "EOF"
 ldconfig
 EOF
 echo "chown \$PkgName:\$PkgName \${PkgUserDir}/\${PkgName}/$build" >> $Output
+# evolution now installed so get the version #
+if [ "$pkgname" = evolution ]; then
+cat >> $Output << "EOF"
+evolutionVersion
+EOF
+fi
 #
 #set required dirs to be install dirs if installing as a package user 
 #
@@ -2947,6 +3009,7 @@ OpPolicy default
 ErrorPolicy retry-job
 </Printer>
 EOFCUPS
+# change ownership of cups files as needed
 chown root:lp /etc/cups/printers.conf
 chmod 600 /etc/cups/printers.conf
 chown root:lp /etc/cups/cupsd.conf
@@ -2960,6 +3023,20 @@ chown root:lp /var/cache/cups
 chown root:lp /var/cache/cups/rss
 chown root:lp /var/spool/cups
 chown root:lp /var/spool/cups/*
+chown root /usr/sbin/cupsd
+chmod 755  /usr/sbin/cupsd
+chown root /usr/lib/cups/*
+chmod 755  /usr/lib/cups/*
+chown root /usr/lib/cups/cgi-bin/*.cgi
+chown root /usr/lib/cups/daemon/cups-*
+chown root /usr/lib/cups/filter/{commandtops,pstops}
+chown root /usr/lib/cups/monitor/*cp
+chown root /usr/lib/cups/notifier/*
+EOF
+     ;;
+     cups-filters)
+           cat >> $Output << "EOF"
+chown root /usr/lib/cups/filter/{bannertopdf,pdftopdf,pdftops}
 EOF
      ;;
      polkit)
@@ -3081,6 +3158,7 @@ EOF
      ;;
      apache)
            cat >> $Output << "EOF"
+sed -i "s/daemon$/apache/" /etc/apache/httpd.conf
 chgrp install /usr/libexec/apache # for subversion
 chmod g+w,o+t /usr/libexec/apache
 EOF
@@ -3390,6 +3468,12 @@ chgrp install /usr/lib/evolution/$evolVers/plugins
 chmod g+w,o+t /usr/lib/evolution/$evolVers/plugins
 chgrp install /usr/share/help/mk
 chmod g+w,o+t /usr/share/help/mk
+EOF
+     ;;
+     eog)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/help/th # for gedit
+chmod g+w,o+t /usr/share/help/th
 EOF
      ;;
      gnome-panel)
@@ -3872,6 +3956,10 @@ case $pkgname in
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/lib/nautilus-sendto/plugins/{libnstburn.la,libnstburn.so,libnstgajim.la,libnstgajim.so,libnstpidgin.la,libnstpidgin.so,libnstremovable_devices.la,libnstremovable_devices.so} /usr/bin/nautilus-sendto"
     ;;
+    gtkplus2)
+        doFirst=""
+        links="/usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
+    ;;
     gtkplus3) # has to own /usr/bin/gtk-update-icon-cache
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
@@ -3911,6 +3999,14 @@ case $pkgname in
     gnome-games)
         doFirst='install -v -m755 -d /var/games && groupadd -g 60 games && useradd -c "Games High Score Owner" -d /var/games -g games -s /bin/false -u 60 games && chown -v games:games /var/games'
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
+    ;;
+    shrd-mime-info)
+        doFirst=""
+        links="/usr/share/mime/packages/freedesktop.org.xml"
+    ;;
+    gdk-pixbuf)
+        doFirst=""
+        links="/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
     ;;
     *)
         doFirst=""
@@ -4035,6 +4131,24 @@ done
 cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
+    ExtUtils-Depends-) # download the source
+    cat << "EOF"
+extutlsdpnds="ExtUtils-Depends-0.304.tar.gz"
+if [ ! -e $extutlsdpnds ]; then
+wget http://search.cpan.org/CPAN/authors/id/F/FL/FLORA/${extutlsdpnds}
+fi
+cd $(tar vxf $extutlsdpnds | awk -F\/ 'END{print $1}')
+EOF
+    ;;
+    ExtUtils-PkgConfig-) # download the source
+    cat << "EOF"
+extutlspkgconfig="ExtUtils-PkgConfig-1.13.tar.gz"
+if [ ! -e $extutlspkgconfig ]; then
+wget http://search.cpan.org/CPAN/authors/id/X/XA/XAOC/${extutlspkgconfig}
+fi
+cd $(tar vxf $extutlspkgconfig | awk -F\/ 'END{print $1}')
+EOF
+    ;;
     x264-) # wget the source file
     cat << "EOF"
 x264src="last_stable_x264.tar.bz2"
@@ -4062,10 +4176,18 @@ fi
 cd $(tar vxf $ffmpegthumsrc | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   polkit-|dbus-|glib-|freetype-|docbook-xsl-|poppler-|git-|cracklib-) # not polkit-gnome, dbus-glib, glibmm, freetype-doc, git man-pages and htmldocs, cracklib-words
+   polkit-|dbus-|freetype-|docbook-xsl-|poppler-|git-|cracklib-) # not polkit-gnome, dbus-glib, glibmm, freetype-doc, git man-pages and htmldocs, cracklib-words
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   glib-) # install the git version
+    cat << "EOF"
+if [ ! -d glib ];then
+git clone git://git.gnome.org/glib
+fi
+cd glib
 EOF
    ;;
    Tie-IxHash-)
@@ -4166,10 +4288,34 @@ rm -rf ${SrcName}*-bin*
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   libreoffice) # need --no-overwrite-dir when untaring
+   libreoffice-core-) # need --no-overwrite-dir when untaring
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}*.tar.*z* --no-overwrite-dir | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   libwebp-) # use the git version because is a dependency of webkitgtk which is from git
+    cat << "EOF"
+if [ ! -d libwebp ]; then
+git clone http://git.chromium.org/webm/libwebp.git
+fi
+cd libwebp
+EOF
+   ;;
+   NetworkManager-) # git the source
+    cat << "EOF"
+if [ ! -d NetworkManager ]; then
+git clone git://anongit.freedesktop.org/NetworkManager/NetworkManager.git
+fi
+cd NetworkManager
+EOF
+   ;;
+   network-manager-applet-) # git the source
+    cat << "EOF"
+if [ ! -d network-manager-applet ]; then
+git clone git://git.gnome.org/network-manager-applet
+fi
+cd network-manager-applet
 EOF
    ;;
    *) # tar.xz,gz,bz2,tgz
@@ -4275,6 +4421,12 @@ case $pkgname in
     tcl)
        GetCommands \
         | sed -e '/cp      -v -R       ../d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    glib)
+       GetCommands \
+        | sed -e 's/.\/configure/.\/autogen.sh/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4572,10 +4724,15 @@ case $pkgname in
           >> $Output
        fi
     ;;
+    libsystemd-login)
+       GetsystemdloginCommands >> $Output
+    ;;
     gpm)
        GetCommands \
-        | sed -e '/chmod   -v   755    doc\/support/,/End \/etc\/sysconfig\/mouse/d' \
-              -e '/EOF/d' \
+        | sed -e '/make install-gpm/d' \
+              -e 's/\*\*EDITME<yourdevice>EDITME\*\*/\/dev\/input\/mice/' \
+              -e 's/\*\*EDITME<yourprotocol>EDITME\*\*/imps2/' \
+              -e 's/\*\*EDITME<additional options>EDITME\*\*//' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4595,6 +4752,7 @@ case $pkgname in
                 -e "/configure_commands()/ i sed -i '/(cd po\\\/build\\\/locale \\\&\\\&/,/endif/d' Makefile" \
                 -e '/make html/,/make man/d' \
                 -e '/make install-man/d' \
+                -e '/tar -xf  ..\/git-htmldocs/ i mkdir -p \/usr\/share\/doc\/git-1.8.0\/man-pages\/{html,text}' \
                 -e '/git config/d' \
                 -e 's/\(.*\)&&$/\1/' \
           | awk '{if ($1 == "make" && $2 =="install")
@@ -4773,6 +4931,7 @@ print $0
     ffmpeg)
        GetCommands \
         | sed -e '/export LIBRARY_PATH/d' \
+              -e 's/.\/configure/CFLAGS="-I\/usr\/include\/openjpeg-1.5" .\/configure/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -4874,13 +5033,15 @@ print $0
     webkitgtk)
        if [ "$GNOME_OR_XFCE" = xfce ]; then
          GetCommands \
-          | sed -e 's/--with-gstreamer=1.0/--with-gstreamer=0.10/' \
+          | sed -e '/sed -i/d' \
+                -e 's/--with-gstreamer=1.0/--with-gstreamer=0.10/' \
                 -e 's/introspection/introspection --disable-geolocation --enable-gtk=2.0 --disable-webkit2/' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
          GetCommands \
-          | sed -e 's/\(.*\)&&$/\1/' \
+          | sed -e '/sed -i/d' \
+                -e 's/\(.*\)&&$/\1/' \
           >> $Output
        fi
     ;;
