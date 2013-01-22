@@ -11,7 +11,7 @@ I've included pkgorder.sh which is a suggested order for running the scripts so 
 blfsfiles.tar.xz is unpacked to /blfsBuildFiles/blfsfiles and contains all the definitions necessary to build the scripts. You will see two types of files:
 $SECTION-files and $SECTION-dependencies. Have a look at these files. The -files have three names for each package. The first is the package name used to install the package. The second is the name of the source file (minus the version) and the third name is that used in the commands from the xml files. These are in /blfs-commands after you've downloaded the book xml. You can change the order of the packages to try and maximize the rate at which dependencies are met. You can also delete packages if you don't want them or add them as you require. I've included a jhbuild.list file to show you the order that gnome's jhbuild suggests for a gnome-3.2 build.
 
-The -dependencies files show the dependencies for each package (doh). These should correspond to 'Required' + 'Recommended' in the book. Edit them as things change, as they do frequently - partilculary if a package's section is changed. Recently clutter went from libraries to xlibs, for example.
+The -dependencies files show the dependencies for each package (doh). These should correspond to 'Required' + 'Recommended' in the book. Edit them as things change, as they do frequently - partilculary if a package's section is changed.
 
 Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. You have to specify the correct SECTION for this single package otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
 
@@ -25,6 +25,7 @@ In the book the blfs-bootscripts are usually installed immediately after a packa
 
 blfsa is fairly large so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site - thanks.
 
+Release2.4 - updated blfsa to set ownership of some cups and cups-filters files to root
 Release2.3 - updates to keep pace with changes to the BLFS book
 Release2.2 - general updates to the BLFS book
 Release2.0 - The way xorg is installed has changed in the book.
