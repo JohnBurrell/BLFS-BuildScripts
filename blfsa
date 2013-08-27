@@ -10,7 +10,8 @@ fi
 
 # repository will be for BLFS
 REPO="BLFS"
-DumpedCommands=$LFS/blfs-commands
+blfscommands="/blfs-commands"
+DumpedCommands=${LFS}${blfscommands}
 Dumpedhtml=$LFS/blfs-html
 WgetList="wget-list" # default name for the source list file
 wgetopts="" # Options for wget, e.g. proxy settings, certs etc
@@ -139,11 +140,11 @@ _edit () {
    elif [ "$tochange" = SVN_URL ]; then
      display="Enter the svn url of the BLFS book"
    elif [ "$tochange" = BOOK_VERSION ]; then
-     display="BLFS book version. For development type BOOK or Current_Development (type blank to get a list)"
+     display="BLFS book version. For the current book, type BOOK (type blank to get a list). You should probably use the current version"
    elif [ "$tochange" = BOOK ]; then
-     display="svn (or) local (if local the book must be in $BLFS_BOOK_LOC_DIR)"
+     display="Enter svn or local (if local the book must be under $BLFS_BOOK_LOC_DIR)"
    elif [ "$tochange" = SOURCES ]; then
-     display="download (or) local (if local, must be in ${LFS}${srcrootdir}/${SECTION})"
+     display="Type download or local (if local, source files must be in ${LFS}${srcrootdir}/${SECTION})"
    elif [ "$tochange" = SECTION ]; then
      display="options are blfs, security, libraries, genutils, sysutils, programming, networks, server, x, xlibs, gnomeplatform, gnomedesktop, gnomeutils, xfce, browser, office, xsoftware, multimedia, pst, avr or ALL"
    elif [ "$tochange" = XORG_PREFIX ]; then
@@ -252,9 +253,11 @@ fi
 } # end SetupSections
 #
 GetLocalREPO () {
-# create a list of local BLFS books - only works relative to $BLFS_BOOK_LOC_DIR
+bookdir=$1
+#
+# create a list of local BLFS books - only works relative to $bookdir
 unset Paths
-for Path in $( find $BLFS_BOOK_LOC_DIR -name index.xml -exec dirname {} ';' )
+for Path in $( find $bookdir -name index.xml -exec dirname {} ';' )
 do
   if [ -e $Path/.svn ]; then
     Paths="$Paths $Path"
@@ -262,7 +265,7 @@ do
 done
 PathCount=$( echo $Paths | awk '{print NF}' )
 case $PathCount in
-   0) echo >&2 "Couldn't find any local BLFS book in $BLFS_BOOK_LOC_DIR"
+   0) echo >&2 "Couldn't find any local BLFS book in $bookdir"
       echo >&2 "Suggest you svn one or specify a different location"
       return $RETURN_PARAM
    ;;
@@ -279,7 +282,7 @@ case $PathCount in
         esac
       done
       case $confirm in
-         No) echo >&2 "This is the only BLFS book in $BLFS_BOOK_LOC_DIR"
+         No) echo >&2 "This is the only BLFS book in $bookdir"
              return $RETURN_PARAM
          ;;
         Yes) 
@@ -335,12 +338,13 @@ esac
 } # end GetLocalREPO
 #
 ChkLocalBook () {
-ChkLocalBookExists
+localbookdir=$1
+ChkLocalBookExists $localbookdir
     return_val=$?
     if [ $return_val -eq $RETURN_PARAM ]; then # requested book not present
       echo "Requested book not present locally. Will svn it"
     else # book present, test if need to svn an update
-      ChkLocalBookDetails
+      ChkLocalBookDetails $localbookdir
       return_val=$?
       if [ $return_val -eq $RETURN_PARAM ]; then
         exit 1
@@ -349,8 +353,11 @@ ChkLocalBookExists
 } # end ChkLocalBook
 #
 ChkLocalBookExists () {
+local bookdir=$1
+#
 unset BookPath
-for BookPath in $( find $BLFS_BOOK_LOC_DIR -name index.xml -exec dirname {} ';' )
+if [ -d $bookdir ]; then
+for BookPath in $( find $bookdir -name index.xml -exec dirname {} ';' )
 do
   if [ -e $BookPath/.svn ]; then #a book exists, check the version
     if [ "$BOOK_VERSION" = Current_Development -o "$BOOK_VERSION" = BOOK ]; then
@@ -358,31 +365,36 @@ do
     else
       version=$BOOK_VERSION
     fi
-    if [ $version != "BOOK" ]; then BookPath="$BookPath/";fi # add a / 
-    if [ $BookPath == ${BLFS_BOOK_LOC_DIR}/${version} ]; then
+    if [ $BookPath = $bookdir ]; then
       return 0 #requested version is present locally
     fi
   fi
 done
+else
+  echo "Dir $bookdir not present locally."
+fi
 return $RETURN_PARAM #requested book not present locally
 } #end ChkLocalBookExists
 #
 ChkLocalBookDetails () {
-if [ "$BOOK_VERSION" = Current_Development -o "$BOOK_VERSION" = BOOK ]; then
+local bookdir=$1
+#
+if [[ "$BOOK_VERSION" = Current_Development || "$BOOK_VERSION" = BOOK || "$BOOK_VERSION" = systemd ]]; then
   # check the last svn date
   returned_array=( $(LastAccessSvn "$argument") )
   retval=$?
   if [ $retval -eq 0 ]; then # compare last svn date with today's date
     if [ ${returned_array[0]} -eq ${returned_array[1]} ]; then
       echo "same book already downloaded today"
-      echo "you will have to delete it if you want to svn again"
+      echo "To use it, set BOOK=local in the config file."
+      echo "To download it again, delete $bookdir"
       return $RETURN_PARAM
     else
       return 0
     fi
   else
     echo "Could not retrieve date of last svn - no entries file found."
-    echo "Will svn it"
+    echo "Will svn the requested book"
     return 0
   fi
 else # book is a release version so don't update it
@@ -393,12 +405,13 @@ fi
 } # end ChkLocalBookDetails
 #
 CleanLocalREPO () { # del any files in the local directory
-if [ -d $BLFS_BOOK_LOC_DIR ]; then #local dir exists
-  if [ "$(ls -A $BLFS_BOOK_LOC_DIR)" ]; then
-    rm -rf $BLFS_BOOK_LOC_DIR/$version # delete contents of local book dir
+local bookdir=$1
+if [ -d $bookdir ]; then #local dir exists
+  if [ "$(ls -A $bookdir)" ]; then
+    rm -rf ${bookdir}/${version} # delete contents of local book dir
   fi
 else  # create it
-  mkdir -pv $BLFS_BOOK_LOC_DIR
+  mkdir -pv $bookdir
 fi
 } # end CleanLocalREPO
 #
@@ -421,9 +434,14 @@ do
       BOOK_VERSION="Current_Development"
     ;;
     ?*)
-      type=tags
-      version=$TAG
-      BOOK_VERSION=$TAG
+      if [ "$BOOK_VERSION" = systemd ]; then
+        type="branches"
+        version="systemd"
+      else
+        type="tags"
+        version=$TAG
+        BOOK_VERSION=$TAG
+      fi
     ;;
   esac
   BOOK_SVN_URL="${SVN_URL}$type/$version"
@@ -452,18 +470,31 @@ done
 } #end WhichBLFSBook
 #
 SetBLFSBook () {
-if [ "$BOOK_VERSION" = Current_Development -o "$BOOK_VERSION" = BOOK ]; then
-  type=trunk
-  version=BOOK
-else
-  type=tags
-  version=$BOOK_VERSION
-fi
+case $BOOK_VERSION in
+   Current_Development)
+         type="trunk"
+         version="BOOK"
+   ;;
+   BOOK)
+         type="trunk"
+         version="BOOK"
+   ;;
+   systemd)
+         type="branches"
+         version="systemd"
+   ;;
+   *)
+         type="tags"
+         version=$BOOK_VERSION
+   ;;
+esac
 } #end SetBLFSBook
 #
 LastAccessSvn () {
 local passed_array   # Local variable
-BookLoc=${BLFS_BOOK_LOC_DIR}/${version}
+local bookdir=$BLFS_BOOK_LOC_DIR
+if [ "$BOOK_VERSION" = systemd ]; then bookdir=${bookdir}/SYSTEMD; fi
+BookLoc=${bookdir}/${version}
 if [ -e ${BookLoc}/.svn/entries ]; then #check time of last svn
   EntriesDate=$( stat --printf=%y ${BookLoc}/.svn/entries | awk 'gsub(/-/,"") {printf $1}' )
   date=$(date +'%Y-%m-%d %H:%M:%S') # today's date
@@ -477,11 +508,13 @@ else
 fi
 } # end LastAccessSvn
 CheckoutSVN () {
-Dir=$BLFS_BOOK_LOC_DIR
-Url="${SVN_URL}$type/$version"
-Tag=$version
+local bookdir=$1
 #
-svn co $Url ${Dir}/$Tag # get the requested book
+Url="${SVN_URL}${type}/${version}"
+#
+echo "Will svn the LFS book at $Url"
+echo "and place it in $bookdir"
+svn co $Url $bookdir # get the requested book
 #
 } # end CheckoutSVN
 #
@@ -489,9 +522,12 @@ LocalBook () {
 if [ "$BOOK_VERSION" = Current_Development -o "$BOOK_VERSION" = BOOK ]; then
     type="trunk"
     version="BOOK"
+elif [ "$BOOK_VERSION" = systemd ]; then
+    type="branches"
+    version="systemd"
 else
-    type="tags"
-    version=$BOOK_VERSION
+  type="tags"
+  version=$BOOK_VERSION
 fi
 } # end LocalBook
 #
@@ -654,9 +690,9 @@ do
            ;;
          esac
       ;;
-      programming) # don't download the OpenJDK sources - a binary is in blfsfiles
+      programming) # don't download the jdk sources - a binary is in blfsfiles
          case $fname in
-           OpenJDK*) # skip these
+           jdkbin*) # skip these
              skipit=true
            ;;
            Archive*|ExtUtils*|Glib*|URI*|XML*) # perl modules
@@ -694,7 +730,8 @@ do
       full_url=${anduin_src_root}/${initial}/${fname} # use anduin
     fi
     if [ "$extName" = patch ]; then full_url=${patch_root}/${fname}; fi
-    wget $full_url -P $SrcPath
+    wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
+    wget $wgetopts $full_url -P $SrcPath
   fi
 done < ${SrcPath}/${sortedfile}
 #
@@ -725,7 +762,7 @@ fi
 } #end GetSources
 #
 GetListFile () {
-REPODIR=${BLFS_BOOK_LOC_DIR}/$version
+REPODIR=${1}/${version}
 if [ -e ${SOURCEDIR}/${WgetList} ]; then
   rm ${SOURCEDIR}/${WgetList}
 fi
@@ -754,7 +791,9 @@ fi
 } # end ChkEmptySrcFiles
 #
 DumpCommands () {
-REPODIR=${BLFS_BOOK_LOC_DIR}/$version
+local bookdir=$2
+#
+REPODIR=$bookdir
 target=$( echo $1 | awk '{print tolower($1)}')
 SVNINFO="$(svn info $REPODIR | awk '{printf $0"|"}')"
 # Note, tagged | on the end so it can be used as a record separator later
@@ -787,45 +826,21 @@ done
 } # end of DumpCommands
 #
 unpackBLFSfiles () {
-CURDIR="$( cd "$( dirname "$0" )" && pwd )" # where this script is held
-cd ${LFS}${blfsBuildFiles}
-tar Jxf ${blfsfilesTar}
-rm ${blfsfilesTar} # untarred so can remove it
-# move the java openjdk file to blfs-sources/programming
+# * NOTE * the tar file $blfsfilesTar and the directory $blfsBuildFiles
+# must exist before calling this function
+#
+tar -xvf ${LFS}/${blfsfilesTar} -C ${LFS}${blfsBuildFiles} --no-same-owner
+#untarred so delete it
+rm ${LFS}/${blfsfilesTar}
+# move the java jdk file to /blfs-sources/programming
 if [ ! -d ${LFS}${srcrootdir}/programming ]; then
   mkdir -pv ${LFS}${srcrootdir}/programming
 fi
-if [ -e ${BLFSBUILDFILES}/OpenJDK-* ]; then
-    rm -rf ${LFS}${srcrootdir}/programming/OpenJDK-* # delete any existing
-    mv ${BLFSBUILDFILES}/OpenJDK-*  ${LFS}${srcrootdir}/programming/
+if [ -e ${BLFSBUILDFILES}/jdk-*-linux-x64.tar.gz ]; then
+    rm -rf ${LFS}${srcrootdir}/programming/jdk-*-linux-x64.tar.gz # delete any existing
+    mv ${BLFSBUILDFILES}/jdk-*-linux-x64.tar.gz  ${LFS}${srcrootdir}/programming/
 fi
-cd $CURDIR
 } #end unpackBLFSfiles
-#
-GetBLFSfiles () {
-if [ ! -d ${LFS}${blfsBuildFiles} ]; then
-  mkdir -pv ${LFS}${blfsBuildFiles}
-fi
-if [ ! -d $BLFSBUILDFILES ]; then
-  if [ -e ${LFS}${blfsBuildFiles}/${blfsfilesTar} ]; then
-    unpackBLFSfiles
-  else
-    if [ -e ${LFS}/${blfsfilesTar} ]; then
-      mv ${LFS}/${blfsfilesTar} ${LFS}${blfsBuildFiles}
-      unpackBLFSfiles
-    else
-      return $RETURN_PARAM
-    fi
-  fi
-  chmod 755 $BLFSBUILDFILES
-else # test if blfsfilesTar is present
-  if [ -e ${LFS}/${blfsfilesTar} ]; then
-    echo "**Warning** - $blfsfilesTar present but not used because $BLFSBUILDFILES exists."
-    echo "If you want to use $blfsfilesTar then delete the $blfsBuildFiles directory."
-  fi
-fi
-return 0
-} # end GetBLFSfiles
 #
 combineScripts () {
 declare -a commands=("${!1}")
@@ -837,6 +852,7 @@ countc=0 # counter for the combine array
 countbl=0 # counter for build lines written
 inc=false # switch for whether a configure, make and install section is present
 cont=0 # number of continuation lines
+ifDoc=false # true if an if block containing a doc
 #
 for (( i=0; i<$numb; i++ ))
 do
@@ -844,20 +860,6 @@ do
     configure_commands*)
       combine[countc++]=${buildWrap[countbl++]}
       combine[countc++]=${buildWrap[countbl++]} # the {: line
-      if $isPython; then
-        case "${commands[countg]}" in
-          *\\)
-             while [[ "${commands[countg]}" == *\\ ]]; do
-               combine[countc++]="  ${commands[countg++]}"
-             done
-             combine[countc++]="  ${commands[countg++]}" # end of the continuation lines
-             inc=true
-          ;;
-          *)
-             :
-          ;;
-        esac
-      fi
       for (( jk=$countg; jk<$numc; jk++ )); do
         case ${commands[jk]} in
            make*) # assume either a make command or make install
@@ -884,15 +886,19 @@ do
               countg=$jk
               break
            ;;
-           'cp -v /usr/share/junit-4.'*)
-              countg=$jk
-              break
-           ;;
-           "cp -v -R junit"*)
-              countg=$jk
-              break
-           ;;
            *"waf build")
+              countg=$jk
+              break
+           ;;
+           './build.sh -Ddist.dir='*) # apache-ant build
+              countg=$jk
+              break
+           ;;
+           "ant dist"*) # junit build
+              countg=$jk
+              break
+           ;;
+           '_bindir="bin.linuxx86"'*) # boost
               countg=$jk
               break
            ;;
@@ -931,7 +937,7 @@ do
       if ! $inc; then
         combine[countc++]='  echo "no configure script for this package"'
       fi
-      ;;
+    ;;
     make_commands*)
       inc=false
       combine[countc++]=${buildWrap[countbl++]}
@@ -939,22 +945,25 @@ do
       for (( jl=$countg; jl<$numc; jl++ )); do
         case ${commands[jl]} in
            *install*) # assume an install command
-              countg=$jl
-              break
+              case ${commands[jl]} in
+                 *"/usr/bin/bjam"*) # this is boost so stay in make
+                       combine[countc++]="  ${commands[jl]}"
+                 ;;
+                 *)
+                       countg=$jl
+                       break
+                 ;;
+              esac
            ;;
            docsdir*)
               countg=$jl
               break
            ;;
-           './build.sh -Ddist.dir='*)
-              countg=$jl
-              break
-           ;;
-           "cp -v -R junit"*)
-              countg=$jl
-              break
-           ;;
            "make update")
+              countg=$jl
+              break
+           ;;
+           "ln -v -sfn ant-"*) # apache-ant symlink
               countg=$jl
               break
            ;;
@@ -1005,7 +1014,7 @@ do
                         foundDoc=true
                         storit[cont++]="${commands[jm]}"
                     ;;
-                    *) # not a doc so store the line
+                    *) # no doc in this cont line
                         storit[cont++]="${commands[jm]}"
                     ;;
                   esac
@@ -1026,7 +1035,7 @@ do
                     combine[countc++]="  ${commands[jm]}"
                     inc=true
                     cont=0
-                    if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
+                    countg=$[jm+1]
                ;;
              esac
           ;;
@@ -1034,28 +1043,16 @@ do
               combine[countc++]="  ${commands[jm]}"
               cont=0
               inc=true
-              if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
-          ;;
-          *"build.sh -Ddist.dir"*) # the apache-ant install line
-              combine[countc++]="  ${commands[jm]}"
-              cont=0
-              inc=true
-              if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
-          ;;
-          "cp -v -R junit"*|"cp -v -R *.html *doc"*) # junit
-              combine[countc++]="  ${commands[jm]}" # the cp junit command
-              cont=0
-              inc=true
-              if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
+              countg=$[jm+1]
           ;;
           '#'*) # comment line so ignore it
-              if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
+              countg=$[jm+1]
           ;;
           "make update")
               combine[countc++]="  ${commands[jm]}"
               cont=0
               inc=true
-              if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
+              countg=$[jm+1]
           ;;
           *'/usr/share/doc/php'*) # php so write the docs
               for (( l=0; l<$cont; l++ )); do
@@ -1064,22 +1061,44 @@ do
               combine[countc++]="  ${commands[jm]}"
               cont=0
               inc=true
-              if [ $[jm+1] -eq $numc ]; then countg=$[jm+1]; fi
+              countg=$[jm+1]
+          ;;
+          if*) # starts with if so if a doc, will need to delete the closing fi
+                   case ${commands[jm]} in
+                   *'/usr/share/doc'*)
+                       ifDoc=true
+                       case ${commands[j]} in
+                          *\\) # a continuation line so store it
+                                storit[cont++]="${commands[jm]}"
+                          ;;
+                       esac
+                   ;;
+                   *\\) # a continuation line
+                       storit[cont++]="${commands[jm]}"
+                   ;;
+                   *) # if block but not a doc or a cont line
+                       echo ${commands[jm]}
+                   ;;
+                esac
           ;;
           *'/usr/share/doc'*) # would have got here because we have a cont line
               cont=0 # doc so don't write it out
+              countg=$[jm+1] # update countg in case this is the last line
+          ;;
+          "ln -v -sfn ant-"*) # apache-ant symlink
+             countg=$jm
+             break
+          ;;
+          "for "*) # begining of a for loop so break
+             countg=$jm
+             cont=0
+             inc=true
+             break
           ;;
           *)
              case "${commands[jm]}" in
-               *\\) # if another cont line, then store it
-                 if [ $cont -gt 0 ]; then
+               *\\) # if a cont line, then store it
                    storit[cont++]="${commands[jm]}"
-                 else # end of install commands so break
-                   inc=true
-                   foundDoc=false
-                   countg=$jm
-                   break
-                 fi                   
                ;;
                *)
                  if ! $foundDoc; then # write out any cont lines
@@ -1088,12 +1107,14 @@ do
                        combine[countc++]="  ${storit[l]}"
                      done
                      combine[countc++]="  ${commands[jm]}"
+                     cont=0
+                     inc=true
+                   else
+                     countg=$jm
+                     cont=0
+                     inc=true
+                     break
                    fi
-                   cont=0
-                   inc=true
-                   foundDoc=false
-                   countg=$jm
-                   break
                  else # continuation of a doc line so ignore it
                    cont=0
                  fi
@@ -1176,8 +1197,9 @@ else
   if [ -e ${DumpedCommands}/${xmlsec}/*-${commandname} ]; then
     curfile=${DumpedCommands}/${xmlsec}/*-${commandname}
   else
-    echo "No commands matching ${DumpedCommands}/${xmlsec}/*-${commandname}"
-    echo "Adjust the command name before continuing. Exiting now"
+    echo -e 'echo "No commands matching '"${blfscommands}"'/'"${xmlsec}"'/*-'"${commandname}"'"'
+    echo 'echo "Adjust the command name before continuing. Exiting now"'
+    echo "exit 1"
     exit 1
   fi
 fi
@@ -1185,54 +1207,25 @@ IFS='
 '
 acom=( $( < $curfile ) )
 case $localpkgname in
-     dbus-glib)
-           ic=0
-           found=false
-           for tline in ${acom[@]}
-           do
-             case $tline in
-                *configure*)
-                       if ! $found; then
-                         found=true
-                         bcom[ic++]=$tline
-                       else
-                         rtrnCom=(${bcom[@]})
-                         return 0
-                       fi
-                  ;;
-                  *)
-                        bcom[ic++]=$tline
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     dbus-python)
+     docbook-xsl)
              ic=0
-             numfc=0
-             foundconf=false
+             catcount=0 # need to find 4 xmlcatalog commands then ignore the rest
+             xmlcatfound=false
              for tline in ${acom[@]}
              do
                case $tline in
-                  *configure*)
-                    if [ $numfc -eq 1 ]; then
-                      foundconf=true # found 2nd occurrence of configure
-                      bcom[ic++]=$tline # write the configure
+                  xmlcatalog*)
+                    ((catcount++))
+                    if [ $catcount -ge 5 ]; then #ignore remaining commands
+                      xmlcatfound=true
                     else
-                      ((numfc++))
-                    fi
-                  ;;
-                  *install*)
-                    if $foundconf; then
                       bcom[ic++]=$tline
-                      break
-                    fi
+                     fi
                   ;;
                   *)
-                    if $foundconf; then
-                      bcom[ic++]=$tline
-                    fi
+                     if ! $xmlcatfound; then #write the commands
+                       bcom[ic++]=$tline
+                     fi
                   ;;
                esac
              done
@@ -1271,6 +1264,230 @@ case $localpkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
+     gimp) # only want the commands to the first make install
+             ic=0
+             foundinstall=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  "make install"*)
+                     if ! $foundinstall; then
+                       bcom[ic++]=$tline
+                       foundinstall=true
+                     fi
+                  ;;
+                  *)
+                     if ! $foundinstall; then
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     git)
+             ic=0
+             foundhtml=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  "make htmldir"*)
+                     foundhtml=true
+                  ;;
+                  "tar -xf ../git-manpages"*)
+                     foundhtml=false
+                  ;;
+                  *)
+                     if ! $foundhtml; then
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     linux-pam) # remove all the test commands
+             ic=0
+             instfound=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  *install*)
+                     if ! $instfound; then
+                       instfound=true
+                     else
+                       bcom[ic++]=$tline
+                       instfound=false
+                     fi
+                  ;;
+                  *)
+                     if ! $instfound; then #write the commands
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     openldap) # only want the commands for a client install
+             ic=0
+             foundmake=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  make)
+                     if $foundmake; then
+                       foundmake=false
+                     else
+                       foundmake=true
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+                  *)
+                     if ! $foundmake; then
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     pango) # commands include those for pangox-compat, so remove them
+             ic=0
+             foundconfig=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  './configure'*)
+                     if $foundconfig; then
+                       foundconfig=false
+                     else
+                       foundconfig=true
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+                  *)
+                     if $foundconfig; then
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     pangox-compat) # commands come from pango, so extract them
+             ic=0
+             foundconfig=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  './configure'*)
+                     if $foundconfig; then
+                       foundconfig=false
+                       bcom[ic++]=$tline
+                     else
+                       foundconfig=true
+                     fi
+                  ;;
+                  *)
+                     if ! $foundconfig; then
+                       bcom[ic++]=$tline
+                     fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     py2cairo) # only want the first set of ./waf lines
+             ic=0
+             foundwaf=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  'PYTHON=/usr/bin/python3 ./waf configure --prefix=/usr'*)
+                       if $foundwaf; then break; fi
+                  ;;
+                  './waf configure'*|*"waf build"*|*"waf install"*)
+                       bcom[ic++]=$tline
+                       if ! $foundwaf; then foundwaf=true; fi
+                  ;;
+                  *)
+                       continue
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     pygobject2)
+             ic=0
+             foundpatch=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  'patch -p1 < ../pygobject-2.28.6-introspection-1.patch'*)
+                       foundpatch=true
+                       bcom[ic++]=$tline
+                  ;;
+                  "make install"*)
+                       if $foundpatch; then
+                         bcom[ic++]=$tline
+                         foundpatch=false
+                         break
+                       else
+                         continue
+                       fi
+                  ;;
+                  *)
+                       if $foundpatch; then
+                         bcom[ic++]=$tline
+                       else
+                         continue
+                       fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
+     shadow) # only pass system-passwd with cracklib
+             ic=0
+             passwdcount=0
+             syspasswdfound=false
+             for tline in ${acom[@]}
+             do
+               case $tline in
+                  'cat > /etc/pam.d/system-password'*)
+                       ((passwdcount++))
+                       if [ $passwdcount -eq 2 ]; then
+                         syspasswdfound=true
+                       else
+                         bcom[ic++]=$tline
+                       fi
+                  ;;
+                  EOF*)
+                       if $syspasswdfound; then
+                         syspasswdfound=false
+                       else
+                         bcom[ic++]=$tline
+                       fi
+                  ;;
+                  *)
+                       if ! $syspasswdfound; then
+                         bcom[ic++]=$tline
+                       fi
+                  ;;
+               esac
+             done
+             rtrnCom=(${bcom[@]})
+             return 0
+     ;;
      xml-parser|tie-ixhash|xml-simple|extutls-dpnds|extutls-pkgcnfg|perl-glib|uri|archive-zip)
              ic=0
              found=false
@@ -1299,7 +1516,7 @@ case $localpkgname in
              done
              return $RETURN_PARAM #install command not found
      ;;
-     aspell|xorg-evdev|xorg-synaptics|xorg-wacom|xorg-nouveau)
+     xorg-evdev|xorg-synaptics|xorg-wacom|xorg-nouveau|aspell)
              ic=0
              found=false
              for tline in ${acom[@]}
@@ -1340,87 +1557,6 @@ case $localpkgname in
                          if $found; then # write commands until next configure
                            bcom[ic++]=$tline
                          fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     linux-pam) # remove all the test commands
-             ic=0
-             instfound=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  *install*)
-                     if ! $instfound; then
-                       instfound=true
-                     else
-                       bcom[ic++]=$tline
-                       instfound=false
-                     fi
-                  ;;
-                  *)
-                     if ! $instfound; then #write the commands
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     shadow) # only pass system-passwd with cracklib
-             ic=0
-             passwdcount=0
-             syspasswdfound=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  'cat > /etc/pam.d/system-password'*)
-                       ((passwdcount++))
-                       if [ $passwdcount -eq 2 ]; then
-                         syspasswdfound=true
-                       else
-                         bcom[ic++]=$tline
-                       fi
-                  ;;
-                  EOF*)
-                       if $syspasswdfound; then
-                         syspasswdfound=false
-                       else
-                         bcom[ic++]=$tline
-                       fi
-                  ;;
-                  *)
-                       if ! $syspasswdfound; then
-                         bcom[ic++]=$tline
-                       fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     docbook-xsl)
-             ic=0
-             catcount=0 # need to find 4 xmlcatalog commands then ignore the rest
-             xmlcatfound=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  xmlcatalog*)
-                    ((catcount++))
-                    if [ $catcount -ge 5 ]; then #ignore remaining commands
-                      xmlcatfound=true
-                    else
-                      bcom[ic++]=$tline
-                     fi
-                  ;;
-                  *)
-                     if ! $xmlcatfound; then #write the commands
-                       bcom[ic++]=$tline
-                     fi
                   ;;
                esac
              done
@@ -1486,148 +1622,6 @@ case $localpkgname in
              rtrnCom=(${bcom[@]})
              return 0
      ;;
-     git)
-             ic=0
-             foundhtml=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  "make htmldir"*)
-                     foundhtml=true
-                  ;;
-                  "tar -xf ../git-manpages"*)
-                     foundhtml=false
-                  ;;
-                  *)
-                     if ! $foundhtml; then
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     pango) # commands include those for pangox-compat, so remove them
-             ic=0
-             foundconfig=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  './configure'*)
-                     if $foundconfig; then
-                       foundconfig=false
-                     else
-                       foundconfig=true
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-                  *)
-                     if $foundconfig; then
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     pangox-compat) # commands come from pango, so extract them
-             ic=0
-             foundconfig=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  './configure'*)
-                     if $foundconfig; then
-                       foundconfig=false
-                       bcom[ic++]=$tline
-                     else
-                       foundconfig=true
-                     fi
-                  ;;
-                  *)
-                     if ! $foundconfig; then
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     py2cairo) # only want the ./waf lines
-             ic=0
-             foundwaf=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  './waf'*)
-                       bcom[ic++]=$tline
-                  ;;
-                  *)
-                       continue
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     pygobject2) # need second patch
-             ic=0
-             foundpatch=false
-             lookforinstall=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  patch*)
-                     if ! $foundpatch; then
-                       foundpatch=true
-                     else # found the second patch, so look for install
-                       lookforinstall=true
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-                  *install*)
-                     if $lookforinstall; then
-                       lookforinstall=false
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-                  *)
-                     if $lookforinstall; then
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
-     openldap) # only want the commands for a client install
-             ic=0
-             foundmake=false
-             for tline in ${acom[@]}
-             do
-               case $tline in
-                  make)
-                     if $foundmake; then
-                       foundmake=false
-                     else
-                       foundmake=true
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-                  *)
-                     if ! $foundmake; then
-                       bcom[ic++]=$tline
-                     fi
-                  ;;
-               esac
-             done
-             rtrnCom=(${bcom[@]})
-             return 0
-     ;;
      *)
              rtrnCom=(${acom[@]})
              return 0
@@ -1656,10 +1650,9 @@ else
   wpa_sup=false
   mozconfigfnd=false
   isSed=false
-  isPython=false
   for line in "${commandScripts[@]}"
   do
-    if $mozconfigfnd || $wpa_sup; then # never both true-in different sections
+    if $mozconfigfnd || $wpa_sup; then # never both true - are in different sections
        case "$line" in
           EOF)
             echo "$line"
@@ -1712,13 +1705,7 @@ else
          echo $line
          ((countg++))
         ;;
-        'cp -v /usr/share/junit-4.'*) # the cp command for apache-ant
-          break
-        ;;
-        "cp -v -R junit"*) # the cp command for junit
-          break
-        ;;
-        *configure*|*Configure*|*bootstrap*|*config*|*autogen.sh*|cmake*) # boost is bootstrap, openssl is config, mysql is cmake
+        *configure*|*Configure*|*bootstrap*|*config*|*autogen.sh*|cmake*|*"build.sh -Ddist.dir"*)
           if $isSed; then # test if another cont line
             case "$line" in
               *\\) # another cont line found so store it
@@ -1740,7 +1727,7 @@ else
             break
           fi
         ;;
-        make*) #begins with make
+        make*) # begins with make or install so break
           if $isSed; then # write out the sed lines
             for (( l=0; l<$cont; l++ )); do
               echo "${cacheit[l]}"
@@ -1748,10 +1735,13 @@ else
             echo "$line"
             cont=0
             ((countg++))
-            isSed=false # finished with this sed command
+            isSed=false # finished with any sed command
           else
             break
           fi
+        ;;
+        'install -v -d -m755 /usr/share/xml/docbook/xml-dtd-4.5'*) # break for docbook-xml
+           break
         ;;
         *)
           case "$line" in
@@ -1768,15 +1758,11 @@ else
                cont=0
                isSed=false # finished with any sed command
                ((countg++)) # count # of commands written to output
-               if [ $countg -eq $numclines ]; then # no more commands
-                 return 0
-               fi
+               [ $countg -eq $numclines ] && return 0
              else
                echo "$line"
                ((countg++)) # count # of commands written to output
-               if [ $countg -eq $numclines ]; then # no more commands
-                 return 0 
-               fi
+               [ $countg -eq $numclines ] && return 0
              fi
             ;;
           esac
@@ -1795,7 +1781,6 @@ else
   if [ $countg -ne $numclines ]; then # output remaining commands
     cont=0 # counter for continuation lines
     foundDoc=false # doc command
-    ifDoc=false # test for an if with a /usr/share/doc in it
     tarcomm=false # tar command
     symtest=false # symlink
 #
@@ -1963,7 +1948,8 @@ do
   echo $xt
 done
 return 0
-} # GetXCommands 
+} # end GetXCommands
+#
 GetcacertsCommands () {
 rtrnCom=""
 getComms $pkgname
@@ -1976,6 +1962,7 @@ done
 } # end GetcacertsCommands
 #
 avrbinutilsComms () {
+local avrbinutilscom=""
 avrbinutilscom[0]="sed -i -e 's/@colophon/@@colophon/' \\"
 avrbinutilscom[1]="       -e 's/doc@cygnus.com/doc@@cygnus.com/' bfd/doc/bfd.texinfo"
 avrbinutilscom[2]="if [ -e ../avr-size.patch ]; then"
@@ -2013,6 +2000,7 @@ rtrncommands=(${avrbinutilscom[@]})
 } # end avrbinutilsComms
 #
 avrgccComms () {
+local avrgcccom=""
 avrgcccom[0]="case \$(uname -m) in"
 avrgcccom[1]="  i?86) sed -i 's/^T_CFLAGS =$/& -fomit-frame-pointer/' gcc/Makefile.in ;;"
 avrgcccom[2]="esac"
@@ -2021,8 +2009,8 @@ avrgcccom[4]="sed -i -e /autogen/d -e /check.sh/d fixincludes/Makefile.in"
 avrgcccom[5]="mv -v libmudflap/testsuite/libmudflap.c++/pass41-frag.cxx{,.disable}"
 avrgcccom[6]="mkdir -v ../gcc-build"
 avrgcccom[7]="cd ../gcc-build"
-avrgcccom[8]="../gcc-4.8.0/configure --prefix=/usr               \\"
-avrgcccom[9]="                 --disable-cloog-version-check \\"
+avrgcccom[8]="../gcc-${gccvers}/configure --prefix=/usr               \\"
+avrgcccom[9]="                  --disable-cloog-version-check \\"
 avrgcccom[10]="                 --disable-install-libiberty \\"
 avrgcccom[11]="                 --disable-libssp \\"
 avrgcccom[12]="                 --disable-libstdcxx-pch \\"
@@ -2062,23 +2050,70 @@ avrgcccom[45]="cp /tmp/usr/share/man/man1/avr-* /usr/share/man/man1"
 rtrncommands=(${avrgcccom[@]})
 } # end avrgccComms
 #
+basicComms () {
+local basiccom=""
+basiccom[0]="./configure --prefix=/usr \\"
+basiccom[1]="            --sysconfdir=/etc \\"
+basiccom[2]="            --localstatedir=/var \\"
+basiccom[3]="            --libexecdir=/usr/lib \\"
+basiccom[4]="            --disable-static"
+basiccom[5]="make"
+basiccom[6]="make install"
+rtrncommands=(${basiccom[@]})
+} # basicComms
+#
+blfsbtscrptsComms () {
+local blfscom=""
+blfscom[0]='make install-$bsToInstall'
+rtrncommands=(${blfscom[@]})
+} # end blfsbtscrptsComms
+#
+boostComms () {
+local boostcom=""
+boostcom[0]="patch -Np2 -i ../boost_1_54_0-fix-new-glibc-1.patch"
+boostcom[1]='echo "using gcc : : : <compileflags>-fno-strict-aliasing ;" >> tools/build/v2/user-config.jam'
+boostcom[2]='echo "using python : 3.3 : /usr/bin/python3 : /usr/include/python3.3m : /usr/lib ;" >> tools/build/v2/user-config.jam'
+boostcom[3]='echo "using mpi ;" >> tools/build/v2/user-config.jam'
+boostcom[4]="./bootstrap.sh --with-toolset=gcc --with-icu --with-python=/usr/bin/python2"
+boostcom[5]='_bindir="bin.linuxx86"'
+boostcom[6]='[ "$(uname -m)" = x86_64 ] && _bindir="bin.linuxx86_64"'
+boostcom[7]="install tools/build/v2/engine/\${_bindir}/bjam /usr/bin/bjam"
+boostcom[8]="pushd tools"
+boostcom[9]="for _tool in bcp inspect quickbook compiler_status process_jam_log wave; do"
+boostcom[10]="  /usr/bin/bjam --toolset=gcc \$_tool"
+boostcom[11]="done"
+boostcom[12]='/usr/bin/bjam --toolset=gcc cflags="-std=gnu++11" library_status'
+boostcom[13]="popd"
+boostcom[14]="cp -a dist/bin/* /usr/bin"
+boostcom[15]="/usr/bin/bjam \\"
+boostcom[16]="      variant=release \\"
+boostcom[17]="      debug-symbols=off \\"
+boostcom[18]="      threading=multi \\"
+boostcom[19]="      runtime-link=shared \\"
+boostcom[20]="      link=shared \\"
+boostcom[21]="      toolset=gcc \\"
+boostcom[22]="      python=2.7 \\"
+boostcom[23]="      --layout=system \\"
+boostcom[24]="      --prefix=/usr \\"
+boostcom[25]="      install"
+rtrncommands=(${boostcom[@]})
+} # end boostComms
+#
 coreutilsComms () {
+local corecom=""
 corecom[0]="patch -Np1 -i ../coreutils-${coreutilsvers}-i18n-1.patch"
 corecom[1]='FORCE_UNSAFE_CONFIGURE=1 ./configure \'
 corecom[2]='--prefix=/usr --libexecdir=/usr/lib --enable-no-install-program=kill,uptime'
 corecom[3]='make'
 corecom[4]='make install'
-corecom[5]='mv -v /usr/bin/{cat,chgrp,chmod,chown,cp,date,dd,df,echo} /bin'
-corecom[6]='mv -v /usr/bin/{false,ln,ls,mkdir,mknod,mv,pwd,rm} /bin'
-corecom[7]='mv -v /usr/bin/{rmdir,stty,sync,true,uname,test,[} /bin'
-corecom[8]='mv -v /usr/bin/chroot /usr/sbin'
-corecom[9]='mv -v /usr/share/man/man1/chroot.1 /usr/share/man/man8/chroot.8'
-corecom[10]='sed -i s/\"1\"/\"8\"/1 /usr/share/man/man8/chroot.8'
-corecom[11]='mv -v /usr/bin/{head,sleep,nice} /bin'
+corecom[5]='mv -v /usr/bin/chroot /usr/sbin'
+corecom[6]='mv -v /usr/share/man/man1/chroot.1 /usr/share/man/man8/chroot.8'
+corecom[7]='sed -i s/\"1\"/\"8\"/1 /usr/share/man/man8/chroot.8'
 rtrncommands=(${corecom[@]})
 } # end coreutilsComms
 #
 espeakComms () {
+local espeakcom=""
 espeakcom[0]="cd src"
 espeakcom[1]="cp portaudio19.h portaudio.h"
 espeakcom[2]="make AUDIO=runtime"
@@ -2087,7 +2122,17 @@ espeakcom[4]="chmod 644 /usr/lib/libespeak.a"
 rtrncommands=(${espeakcom[@]})
 } # end espeakComms
 #
+gtkvncComms () {
+local gtkvnccom=""
+gtkvnccom[0]="./configure --prefix=/usr \\"
+gtkvnccom[1]="            --with-gtk=3.0 \\"
+gtkvnccom[2]="            --enable-vala"
+gtkvnccom[3]="make"
+gtkvnccom[4]="make install"
+rtrncommands=(${gtkvnccom[@]})
+} # end gtkvncComms
 hamcrestComms () {
+local hamcrestcom=""
 hamcrestcom[0]="install -v -dm755 /usr/share/java/hamcrest"
 hamcrestcom[1]="for hamtype in core library generator integration; do"
 hamcrestcom[2]="  cp \${SrcName}\${hamtype}-\${pkgver}.jar /usr/share/java/hamcrest"
@@ -2097,64 +2142,46 @@ hamcrestcom[5]="done"
 rtrncommands=(${hamcrestcom[@]})
 } # end hamcrestComms
 #
-OpenJDKComms () {
-local openjdkcom=""
-openjdkcom[0]="install -v -m755 -d /opt/OpenJDK-1.7.0.9"
-openjdkcom[1]="mv -v * /opt/OpenJDK-1.7.0.9"
-openjdkcom[2]="ln -v -nsf OpenJDK-1.7.0.9 /opt/OpenJDK"
-openjdkcom[3]='cat > /etc/profile.d/openjdk.sh << "EOF"'
-openjdkcom[4]="# Begin /etc/profile.d/openjdk.sh"
-openjdkcom[5]="# Set JAVA_HOME directory"
-openjdkcom[6]="JAVA_HOME=/opt/OpenJDK"
-openjdkcom[7]="# Adjust PATH"
-openjdkcom[8]="pathappend \${JAVA_HOME}/bin PATH"
-openjdkcom[9]="# Auto Java CLASSPATH"
-openjdkcom[10]="# Copy jar files to, or create symlinks in this directory"
-openjdkcom[11]="AUTO_CLASSPATH_DIR=/usr/share/java"
-openjdkcom[12]="pathprepend . CLASSPATH"
-openjdkcom[13]="for dir in \`find \${AUTO_CLASSPATH_DIR} -type d 2>/dev/null\`; do"
-openjdkcom[14]="    pathappend \$dir CLASSPATH"
-openjdkcom[15]="done"
-openjdkcom[16]='for jar in `find ${AUTO_CLASSPATH_DIR} -name "*.jar" 2>/dev/null`; do'
-openjdkcom[17]="    pathappend \$jar CLASSPATH"
-openjdkcom[18]="done"
-openjdkcom[19]="export JAVA_HOME CLASSPATH"
-openjdkcom[20]="unset AUTO_CLASSPATH_DIR dir jar"
-openjdkcom[23]="# End /etc/profile.d/openjdk.sh"
-openjdkcom[24]="EOF"
-rtrncommands=(${openjdkcom[@]})
-} #end OpenJDKComms
+jdkbinComms () {
+local jdkbincom=""
+jdkbincom[0]="install -v -m755 -d /opt/jdk-${jdkvers}"
+jdkbincom[1]="mv -v * /opt/jdk-${jdkvers}"
+jdkbincom[2]="ln -v -nsf jdk-${jdkvers} /opt/jdk"
+jdkbincom[3]="chown -R -h jdkbin:jdkbin /opt/jdk-${jdkvers}"
+jdkbincom[4]='cat > /etc/profile.d/openjdk.sh << "EOF"'
+jdkbincom[5]="# Begin /etc/profile.d/openjdk.sh"
+jdkbincom[6]="# Set JAVA_HOME directory"
+jdkbincom[7]="JAVA_HOME=/opt/jdk"
+jdkbincom[8]="# Adjust PATH"
+jdkbincom[9]="pathappend \${JAVA_HOME}/bin PATH"
+jdkbincom[10]="# Auto Java CLASSPATH"
+jdkbincom[11]="# Copy jar files to, or create symlinks in this directory"
+jdkbincom[12]="AUTO_CLASSPATH_DIR=/usr/share/java"
+jdkbincom[13]="pathprepend . CLASSPATH"
+jdkbincom[14]="for dir in \`find \${AUTO_CLASSPATH_DIR} -type d 2>/dev/null\`; do"
+jdkbincom[15]="    pathappend \$dir CLASSPATH"
+jdkbincom[16]="done"
+jdkbincom[17]='for jar in `find ${AUTO_CLASSPATH_DIR} -name "*.jar" 2>/dev/null`; do'
+jdkbincom[18]="    pathappend \$jar CLASSPATH"
+jdkbincom[19]="done"
+jdkbincom[20]="export JAVA_HOME CLASSPATH"
+jdkbincom[21]="unset AUTO_CLASSPATH_DIR dir jar"
+jdkbincom[22]="# End /etc/profile.d/openjdk.sh"
+jdkbincom[23]="EOF"
+rtrncommands=(${jdkbincom[@]})
+} #end jdkbinComms
 #
-blfsbtscrptsComms () {
-local blfscom=""
-blfscom[0]='make install-$bsToInstall'
-rtrncommands=(${blfscom[@]})
-} # end blfsbtscrptsComms
-#
-pyComms () {
-local pycom=""
-if [ "$pkgname" = py3cairo ]; then
-pycom[0]="python3 ./waf --version"
-pycom[1]="./waf configure --prefix=/usr"
-pycom[2]="./waf build"
-pycom[3]="./waf install"
-elif [ "$pkgname" = pyxdg ]; then
-isPython=true
-pycom[0]="python2 setup.py install"
-elif [ "$pkgname" = docutils ]; then
-isPython=true
-pycom[0]="python3 setup.py install"
-fi
-rtrncommands=(${pycom[@]})
-} #end pyComms
-#
-basicComms () {
-local basiccom=""
-basiccom[0]="./configure --prefix=/usr"
-basiccom[1]="make"
-basiccom[2]="make install"
-rtrncommands=(${basiccom[@]})
-} # basicComms
+junitComms () {
+local junitcom=""
+junitcom[0]="if [ ! -e ../Manifest.txt ]; then"
+junitcom[1]="  cp ${blfsBuildFiles}/${blfsfiles}/Manifest.txt ../"
+junitcom[2]="fi"
+junitcom[3]="ant dist -Dversion-status=''"
+junitcom[4]="jar ufm junit4.12/junit-dep-4.12.jar ../Manifest.txt"
+junitcom[5]="install -Dm644 junit4.12/junit-dep-4.12.jar /usr/share/java/junit-4.12.jar"
+junitcom[6]="ln -svf junit-4.12.jar /usr/share/java/junit.jar"
+rtrncommands=(${junitcom[@]}) 
+} # end junitComms
 #
 libproxyComms () {
 local libproxycom=""
@@ -2169,6 +2196,183 @@ libproxycom[7]="make"
 libproxycom[8]="make install"
 rtrncommands=(${libproxycom[@]})
 } # end libproxyComms
+#
+libpwqualityComms () {
+local libpwqualitycom=""
+libpwqualitycom[0]="./configure --prefix=/usr \\"
+libpwqualitycom[1]="            --sysconfdir=/etc \\"
+libpwqualitycom[2]="            --with-securedir=/lib/security \\"
+libpwqualitycom[3]="            --disable-static"
+libpwqualitycom[4]="make"
+libpwqualitycom[5]="make install"
+rtrncommands=(${libpwqualitycom[@]})
+} # end libpwqualityComms
+#
+mariadbComms () {
+local mariadbciom=""
+mariadbcom[0]="if [ ! -d build ]; then"
+mariadbcom[1]="  mkdir build"
+mariadbcom[2]="fi"
+mariadbcom[3]="cd build"
+mariadbcom[4]="cmake -DCMAKE_BUILD_TYPE=Release \\"
+mariadbcom[5]="      -DCMAKE_INSTALL_PREFIX=/usr \\"
+mariadbcom[6]="      -DSYSCONFDIR=/etc/mysql \\"
+mariadbcom[7]="      -DMYSQL_DATADIR=/var/lib/mysql \\"
+mariadbcom[8]="      -DMYSQL_UNIX_ADDR=/run/mysqld/mysqld.sock \\"
+mariadbcom[9]="      -DDEFAULT_CHARSET=utf8 \\"
+mariadbcom[10]="      -DDEFAULT_COLLATION=utf8_general_ci \\"
+mariadbcom[11]="      -DENABLED_LOCAL_INFILE=ON \\"
+mariadbcom[12]="      -DINSTALL_INFODIR=share/mysql/docs \\"
+mariadbcom[13]="      -DINSTALL_MANDIR=share/man \\"
+mariadbcom[14]="      -DINSTALL_PLUGINDIR=lib/mysql/plugin \\"
+mariadbcom[15]="      -DINSTALL_SCRIPTDIR=bin \\"
+mariadbcom[16]="      -DINSTALL_INCLUDEDIR=include/mysql \\"
+mariadbcom[17]="      -DINSTALL_DOCREADMEDIR=share/mysql \\"
+mariadbcom[18]="      -DINSTALL_SUPPORTFILESDIR=share/mysql \\"
+mariadbcom[19]="      -DINSTALL_MYSQLSHAREDIR=share/mysql \\"
+mariadbcom[20]="      -DINSTALL_DOCDIR=share/mysql/docs \\"
+mariadbcom[21]="      -DINSTALL_SHAREDIR=share/mysql \\"
+mariadbcom[22]="      -DWITH_READLINE=ON \\"
+mariadbcom[23]="      -DWITH_ZLIB=system \\"
+mariadbcom[24]="      -DWITH_SSL=system \\"
+mariadbcom[25]="      -DWITH_LIBWRAP=OFF \\"
+mariadbcom[26]="      -DWITH_LIBEVENT=system \\"
+mariadbcom[27]="      -DWITH_EXTRA_CHARSETS=complex \\"
+mariadbcom[28]="      -DWITH_EMBEDDED_SERVER=ON \\"
+mariadbcom[29]="      -DWITH_ARCHIVE_STORAGE_ENGINE=1 \\"
+mariadbcom[30]="      -DWITH_BLACKHOLE_STORAGE_ENGINE=1 \\"
+mariadbcom[31]="      -DWITH_INNOBASE_STORAGE_ENGINE=1 \\"
+mariadbcom[32]="      -DWITH_PARTITION_STORAGE_ENGINE=1 \\"
+mariadbcom[33]="      -DWITHOUT_EXAMPLE_STORAGE_ENGINE=1 \\"
+mariadbcom[34]="      -DWITHOUT_FEDERATED_STORAGE_ENGINE=1 \\"
+mariadbcom[35]="      -DWITHOUT_PBXT_STORAGE_ENGINE=1 \\"
+mariadbcom[36]='      -DCMAKE_C_FLAGS="-fPIC -fno-strict-aliasing -DBIG_JOINS=1 -fomit-frame-pointer" \'
+mariadbcom[37]='      -DCMAKE_CXX_FLAGS="-fPIC -fno-strict-aliasing -DBIG_JOINS=1 -felide-constructors -fno-rtti" \'
+mariadbcom[38]="      .."
+mariadbcom[39]="make"
+mariadbcom[40]="make install"
+rtrncommands=(${mariadbcom[@]})
+} # end mariadbComms
+#
+netctlComms () {
+local netctlcom=""
+netctlcom[0]="make install"
+netctlcom[1]="install -D -m644 contrib/bash-completion /usr/share/bash-completion/completions/netctl"
+netctlcom[2]="install -D -m644 contrib/zsh-completion /usr/share/zsh/site-functions/_netctl"
+rtrncommands=(${netctlcom[@]})
+} # end netctlComms
+#
+ntificatndemonComms () {
+local ntificatndemoncom=""
+ntificatndemoncom[0]="./configure --prefix=/usr \\"
+ntificatndemoncom[1]="            --sysconfdir=/etc \\"
+ntificatndemoncom[2]="            --libexecdir=/usr/lib/notification-daemon"
+ntificatndemoncom[3]="make"
+ntificatndemoncom[4]="make install"
+rtrncommands=(${ntificatndemoncom[@]})
+} # end ntificatndemonComms
+#
+openjdkComms () {
+local openjdkcom=""
+openjdkcom[0]="if [ ! -d /usr/share/java ]; then install -v -d -m755 /usr/share/java; fi"
+openjdkcom[1]="if [[ ! -e /usr/share/java/js.jar || ! -e /usr/share/java/js-14.jar ]]; then"
+openjdkcom[2]="  unzip ../rhino1_7R4.zip"
+openjdkcom[3]="  install -v -m755 rhino1_7R4/*.jar /usr/share/java"
+openjdkcom[4]="fi"
+openjdkcom[5]="cp -v ../corba.tar.gz     ."
+openjdkcom[6]="cp -v ../hotspot.tar.gz   ."
+openjdkcom[7]="cp -v ../jaxp.tar.gz      ."
+openjdkcom[8]="cp -v ../jaxws.tar.gz     ."
+openjdkcom[9]="cp -v ../jdk.tar.gz       ."
+openjdkcom[10]="cp -v ../langtools.tar.gz ."
+openjdkcom[11]="cp -v ../openjdk.tar.gz   ."
+openjdkcom[12]="patch -Np1 -i ../icedtea-2.4.1-add_cacerts-2.patch"
+openjdkcom[13]="patch -Np1 -i ../icedtea-2.4.1-fixed_paths-1.patch"
+openjdkcom[14]="patch -Np1 -i ../icedtea-2.4.1-fix_tests-1.patch"
+openjdkcom[15]="unset JAVA_HOME"
+openjdkcom[16]="./autogen.sh"
+openjdkcom[17]="./configure \\"
+openjdkcom[18]="  --disable-tests \\"
+openjdkcom[19]="  --disable-downloading --disable-Werror \\"
+openjdkcom[20]="  --with-jdk-home=/opt/jdk-${jdkvers} \\"
+openjdkcom[21]="  --enable-nss \\"
+openjdkcom[22]="  --with-version-suffix=blfs \\"
+openjdkcom[23]="  --enable-pulse-java"
+openjdkcom[24]="make"
+openjdkcom[25]="chmod 0644 openjdk.build/j2sdk-image/lib/sa-jdi.jar"
+openjdkcom[26]="install -m755 -d /opt/jdk7-openjdk"
+openjdkcom[27]="cp -R openjdk.build/j2sdk-image/* /opt/jdk7-openjdk"
+openjdkcom[28]="if [ ! -d /usr/share/applications ]; then install -m755 -d /usr/share/applications; fi"
+openjdkcom[29]="install -m644 jconsole.desktop /usr/share/applications"
+openjdkcom[30]="rm -rf /opt/jdk"
+openjdkcom[31]="ln -v -nsf jdk7-openjdk /opt/jdk"
+rtrncommands=(${openjdkcom[@]})
+} # openjdkComms
+#
+pyComms () {
+local pycom=""
+if [ "$pkgname" = py3cairo ]; then
+pycom[0]="sed -i 's:bin/env python:bin/env python3:' waf"
+pycom[1]="python3 ./waf --version"
+pycom[2]="PYTHON=/usr/bin/python3 ./waf configure --prefix=/usr"
+pycom[3]="PYTHON=/usr/bin/python3 ./waf build"
+pycom[4]="PYTHON=/usr/bin/python3 ./waf install"
+elif [ "$pkgname" = "py2-xdg" ]; then
+pycom[0]="python2 setup.py install --optimize=1"
+elif [ "$pkgname" = "py3-xdg" ]; then
+pycom[0]="python3 setup.py install --optimize=1"
+elif [ "$pkgname" = docutils ]; then
+pycom[0]="python3 setup.py install --optimize=1"
+fi
+rtrncommands=(${pycom[@]})
+} #end pyComms
+#
+py2atspiComms () {
+py2atspicom=""
+py2atspicom[0]="sed '/AC_PATH_XTRA/d' -i configure.ac"
+py2atspicom[1]="autoreconf -fi"
+py2atspicom[2]="mkdir ../python2"
+py2atspicom[3]="cd ../python2"
+py2atspicom[4]="../\${srcdir}/configure --prefix=/usr --with-python=/usr/bin/python2"
+py2atspicom[5]="make"
+py2atspicom[6]="make install"
+rtrncommands=(${py2atspicom[@]})
+} # end py2atspiComms
+#
+py2dbusComms () {
+local py2dbuscom=""
+py2dbuscom[0]="PYTHON=python2 ./configure --prefix=/usr \\"
+py2dbuscom[1]="                            --docdir=/usr/share/doc/dbus-python-1.2.0"
+py2dbuscom[2]="make"
+py2dbuscom[3]="make install"
+rtrncommands=(${py2dbuscom[@]})
+} # end py2dbusComms
+#
+py3dbusComms () {
+local py3dbuscom=""
+py3dbuscom[0]="PYTHON=python3 ./configure --prefix=/usr \\"
+py3dbuscom[1]="                            --docdir=/usr/share/doc/dbus-python-1.2.0"
+py3dbuscom[2]="make"
+py3dbuscom[3]="make install"
+rtrncommands=(${py3dbuscom[@]})
+} # end py3dbusComms
+#
+pysolfcComms () {
+local pysolfccom=""
+pysolfccom[0]="find . -name \\*.py -exec sed -i -e 's|#!/usr/bin/env python|#!/usr/bin/env python2|' {} \\;"
+pysolfccom[1]="python2 setup.py install"
+pysolfccom[2]="ln -sv pysol.py /usr/bin/pysol"
+rtrncommands=(${pysolfccom[@]})
+} # end pysolssComms
+#
+pysolssComms () {
+local pysolsscom=""
+pysolsscom[0]="cd src"
+pysolsscom[1]="./configure"
+pysolsscom[2]="make PYTHON=python2"
+pysolsscom[3]="python2 setup.py install"
+rtrncommands=(${pysolsscom[@]})
+} # end pysolssComms
 #
 squidComms () {
 local squidcom=""
@@ -2193,28 +2397,69 @@ rtrncommands=(${squidcom[@]})
 } # end squidComms
 #
 systemdComms () {
-systemdcom[0]='./configure --prefix=/usr \'
-systemdcom[1]='PYTHON=python2 \'
-systemdcom[2]='PYTHON_CONFIG=python2-config \'
-systemdcom[3]='--libexecdir=/usr/lib \'
-systemdcom[4]='--localstatedir=/var \'
-systemdcom[5]='--sysconfdir=/etc \'
-systemdcom[6]='--enable-introspection \'
-systemdcom[7]='--docdir=/usr/share/doc/systemd-199 \'
-systemdcom[8]='--with-rootprefix= \'
-systemdcom[9]='--with-rootlibdir=/lib \'
-systemdcom[10]='--with-kbd-loadkeys=/bin/loadkeys \'
-systemdcom[11]='--with-kbd-setfont=/bin/setfont \'
-systemdcom[12]='--enable-split-usr'
-systemdcom[13]='make'
-systemdcom[14]='make install'
-systemdcom[15]='for tool in runlevel reboot shutdown poweroff halt telinit; do'
-systemdcom[16]='    ln -sfv ../bin/systemctl /sbin/$tool'
-systemdcom[17]='done'
-systemdcom[18]='ln -sfv ../lib/systemd/systemd /sbin/init'
-systemdcom[19]='sed -i "s@0775 root lock@0755 root root@g" /usr/lib/tmpfiles.d/legacy.conf'
+local systemdcom=""
+systemdcom[0]="./configure --prefix=/usr \\"
+systemdcom[1]="            --libexecdir=/usr/lib \\"
+systemdcom[2]="            --localstatedir=/var \\"
+systemdcom[3]="            --sysconfdir=/etc \\"
+systemdcom[4]="            --enable-introspection \\"
+systemdcom[5]="            --enable-gtk-doc \\"
+systemdcom[6]="            --with-rootprefix= \\"
+systemdcom[7]="            --with-dbuspolicydir=/etc/dbus-1/system.d \\"
+systemdcom[8]="            --with-rootlibdir=/usr/lib \\"
+systemdcom[9]='            --with-firmware-path="/usr/lib/firmware/updates:/usr/lib/firmware" \'
+systemdcom[10]="            --docdir=/usr/share/doc/systemd-${systemdvers}"
+systemdcom[11]="make"
+systemdcom[12]="make install"
+systemdcom[13]="for tool in runlevel reboot shutdown poweroff halt telinit; do"
+systemdcom[14]="    ln -sfv systemctl /usr/bin/\$tool"
+systemdcom[15]="done"
+systemdcom[16]="ln -sfv ../lib/systemd/systemd /usr/bin/init"
+systemdcom[17]='sed -i "s@0775 root lock@0755 root root@g" /usr/lib/tmpfiles.d/legacy.conf'
+systemdcom[18]="systemd-machine-id-setup"
 rtrncommands=(${systemdcom[@]})
 } # end systemdComms
+#
+telepathyglibComms () {
+local telepathyglibcom=""
+telepathyglibcom[0]="./configure --prefix=/usr \\"
+telepathyglibcom[1]="            --enable-vala-bindings \\"
+telepathyglibcom[2]="            --disable-static"
+telepathyglibcom[3]="make"
+telepathyglibcom[4]="make install"
+rtrncommands=(${telepathyglibcom[@]})
+} # end telepathyglibComms
+#
+telepathylogrComms () {
+local telepathylogrcom=""
+telepathylogrcom[0]="./configure --prefix=/usr \\"
+telepathylogrcom[1]="            --libexecdir=/usr/lib/telepathy \\"
+telepathylogrcom[2]="            --enable-vala-bindings \\"
+telepathylogrcom[3]="            --disable-static"
+telepathylogrcom[4]="make"
+telepathylogrcom[5]="make install"
+rtrncommands=(${telepathylogrcom[@]})
+} # end telepathylogrComms
+#
+tlpthyfrstreamComms () {
+local tlpthyfrstreamcom=""
+tlpthyfrstreamcom[0]="./configure --prefix=/usr \\"
+tlpthyfrstreamcom[1]="            --disable-static"
+tlpthyfrstreamcom[2]="make"
+tlpthyfrstreamcom[3]="make install"
+rtrncommands=(${tlpthyfrstreamcom[@]})
+} # end tlpthyfrstreamComms
+#
+tpthymisscntrlComms () {
+local tpthymisscntrlcom=""
+tpthymisscntrlcom[0]="./configure --prefix=/usr \\"
+tpthymisscntrlcom[1]="            --libexecdir=/usr/lib/telepathy \\"
+tpthymisscntrlcom[2]="            --enable-gnome-keyring \\"
+tpthymisscntrlcom[3]="            --disable-static"
+tpthymisscntrlcom[4]="make"
+tpthymisscntrlcom[5]="make install"
+rtrncommands=(${tpthymisscntrlcom[@]})
+} # end tpthymisscntrlComms
 #
 v4lComms () {
 local v4lcom=""
@@ -2228,7 +2473,7 @@ rtrncommands=(${v4lcom[@]})
 #
 GetInternalCommands () {
 # $1 is the function name that creates the commands
-#get access to the build array
+# get access to the build array
 rtrnBuild=""
 getBuild
 return_val=$?
@@ -2242,23 +2487,38 @@ else
   numclines=${#commandScripts[@]}
   countg=0 # initialize commands counter
   cont=0
-  isPython=false
   for line in "${commandScripts[@]}"
   do
     case "$line" in
-       *OpenJDK*) # commands for openjdk
-         break
+       sed*)
+# test if sed has continuation line
+         case "$line" in
+           *\\)
+             cacheit[cont++]="$line"
+             ((countg++))
+           ;;
+           *)
+             echo "$line"
+             ((countg++))
+           ;;
+         esac
        ;;
        *configure*)
          break
        ;;
-       cmake*) # configure commands for libproxy
+       cmake*) # configure commands for libproxy, mysql
          break
        ;;
-       make*) # no configure script for espeak
+       *bootstrap*) # boost
          break
        ;;
-       *install) # for python modules
+       make*) # no configure script
+         break
+       ;;
+       *"setup.py install"*) # python modules
+         break
+       ;;
+       "ant dist"*) # junit
          break
        ;;
        *)
@@ -2275,9 +2535,11 @@ else
                echo "$line"
                cont=0
                ((countg++)) # count # of commands written to output
+               [ $countg -eq $numclines ] && return 0
              else
                echo "$line"
                ((countg++)) # count # of commands written to output
+               [ $countg -eq $numclines ] && return 0
              fi
             ;;
           esac
@@ -2324,10 +2586,6 @@ else
   return 0
 fi
 } # end GetInternalCommands
-#
-GetBLFSCommands () {
-echo "put commands here"
-} # GetBLFSCommands
 #
 CreateBuildDirasroot () {  #1 is the build dir
 cat << "EOF"
@@ -2379,7 +2637,7 @@ chgrp install $BuildLog
 chmod 664 $BuildLog
 #
 cat > /etc/pkgusr/bash_profile << "BashProfile"
-export PATH=/usr/lib/pkgusr:/bin:/usr/bin:/opt/OpenJDK/bin:/opt/ant/bin:/opt/qt/bin
+export PATH=/usr/lib/pkgusr:/bin:/usr/bin:/opt/jdk/bin:/opt/ant/bin
 export PROMPT_COMMAND='PS1="package \u:"$(pwd)"> "'
 cd
 EOF
@@ -2432,6 +2690,22 @@ rm -rf \$curdir
 rm -rf .cache"
 } # end of delSrcFile
 #
+php_setup () {
+    cat << "EOF"
+php_setup () {
+# setup the configure variables _phpconfig and _phpextensions for php
+#
+if [ -f /blfsBuildFiles/blfsfiles/conf-files/php.conf ]; then
+  . /blfsBuildFiles/blfsfiles/conf-files/php.conf
+else
+  echo "php.conf not found in /blfsBuildFiles/blfsfiles/conf-files/"
+  echo "Place it there to continue"
+  exit 1
+fi
+} # end php_setup
+EOF
+} # end php_setup
+#
 Function () {
 echo "${FuncName}_ () {
 PkgName=$pkgname
@@ -2451,9 +2725,10 @@ if $as_root; then
     ;;
   esac
 fi
+#
 case $pkgname in
    blfs-btscrpts)
-cat >> $Output << "EOF"
+      cat >> $Output << "EOF"
 bsToInstall=$bsToInstall
 EOF
    ;;
@@ -2461,12 +2736,22 @@ EOF
 echo "udevvers=$udevvers" >> $Output
    ;;
 esac
+#
 echo "starttime=\$( date +%s )" >> $Output
+# check whether already installed
 case $pkgname in
    blfs-btscrpts)
-cat >> $Output << "EOF"
+      cat >> $Output << "EOF"
 if [ -e "${PkgUserDir}/${PkgName}/.${bsToInstall}" ]; then
   echo "skipping ${PkgName}/${bsToInstall}"
+  return
+fi
+EOF
+   ;;
+   systemd) # check for name .systemd_gudev
+      cat >> $Output << "EOF"
+if [ -e "${PkgUserDir}/${PkgName}/.${PkgName}_gudev" ]; then
+  echo "skipping ${PkgName}"
   return
 fi
 EOF
@@ -2478,6 +2763,9 @@ if [ -e "${PkgUserDir}/${PkgName}/.${PkgName}" ]; then
   return
 fi
 EOF
+   ;;
+esac
+# check for dependencies
 case $pkgname in
    firewall) # no need to check dependencies
    echo "BuildScript=true" >> $Output
@@ -2495,6 +2783,7 @@ if [[ $return_val -eq $RETURN_PARAM || $return_val -eq $RETURN_NOTSET ]]; then
   BuildScript=true
 elif [[ $return_val -eq 0 ]]; then # test if dependencies met
 EOF
+# next case for xfce
     case $pkgname in
       glib-networking|libsoup|gvfs|webkitgtk|pulseaudio|gst-plgns-good|libcanberra)
           if [ "$GNOME_OR_XFCE" = xfce ]; then
@@ -2530,6 +2819,7 @@ EOF
           fi
       ;;
     esac
+# end case xfce
 cat >> $Output << "EOF"
   rtrnDepNotMet=""
   testDeps DepRtrn[@]
@@ -2542,10 +2832,10 @@ fi
 EOF
    ;;
 esac
+# end case testing dependencies
 echo "if \$BuildScript; then
 if \$INSTALLPKG; then" >> $Output
-   ;;
-esac
+
 if ! $as_root; then
   echo 'install -v -d ${PkgUserDir}/${PkgName}' >> $Output
   echo "touch \${PkgUserDir}/\${PkgName}/$build" >> $Output
@@ -2566,8 +2856,9 @@ EOF
     echo "source /etc/profile.d/xorg.sh" >> $Output
   fi
   echo "SrcName=$srcname" >> $Output
+# define sourcedir in the build file
   case $pkgname in
-    cups)
+    boost|cups|gnome-menus|gnome-panel|gnm-scrnsaver|gnome-shell|nss) # need to define blfsfiles to apply patches
      echo "sourcedir=${srcrootdir}/${Section}
 blfsfiles=${blfsBuildFiles}/${blfsfiles}" >> $Output
     ;;
@@ -2587,6 +2878,7 @@ Python3vers=$Python3vers" >> $Output
       echo "sourcedir=${srcrootdir}/${Section}" >> $Output
     ;;
   esac
+# end defining sourcedir
 else # building as root
   echo "starttime=\$( date +%s )" >> $Output
   cat >> $Output << "EOF"
@@ -2596,6 +2888,7 @@ EOF
     echo "source /etc/profile.d/xorg.sh" >> $Output
   fi
 fi # end as_root
+# case to unpack sources
 case $pkgname in
   cacerts)
      cat >> $Output << "EOF"
@@ -2619,24 +2912,34 @@ EOF
       cursec=${pkgname//x7/}
 echo "cursec=$cursec" >> $Output
     ;;
+    php)
+      echo "curdir=\$( echo \$PWD )" >> $Output
+      php_setup >> $Output
+      cat >> $Output << "EOF"
+php_setup
+EOF
+    ;;
     *)
       echo "curdir=\$( echo \$PWD )" >> $Output
       case $pkgname in
          avahi|vlc)
-            echo "source /etc/profile.d/qt.sh
-export PKG_CONFIG_PATH=\$PKG_CONFIG_PATH:/opt/qt/lib/pkgconfig" >> $Output
+            echo "source /etc/profile.d/qt.sh" >> $Output
          ;;
          apache-ant|icedtea-web)
             echo "source /etc/profile.d/openjdk.sh" >> $Output
             if $as_root; then
-              echo "export PATH=\$PATH:/opt/OpenJDK/bin" >> $Output
+              echo "export PATH=\$PATH:/opt/jdk/bin" >> $Output
             fi
+         ;;
+         py2-atspi|py3-atspi)
+            echo "srcdir=\$( echo \$curdir | awk -F\\/ '{print \$NF}')" >> $Output
          ;;
       esac
     ;;
   esac
   ;;
 esac
+# end case unpacking sources
 WriteScript
 closefunction
 } # end of Function
@@ -2648,8 +2951,11 @@ case $pkgname in
 cd ..
 language="aspell6-en"
 dictionary="${language}-7.1-0.tar.bz2"
+EOF
+echo "wgetopts=\"$wgetopts\"" >> $Output
+    cat >> $Output << "EOF"
 if [ ! -e $dictionary ]; then
-  wget ftp://ftp.gnu.org/gnu/aspell/dict/en/${dictionary}
+  wget $wgetopts ftp://ftp.gnu.org/gnu/aspell/dict/en/${dictionary}
 fi
 cd $(tar vxf ${language}*.tar.*z* | awk -F\/ 'END{print $1}')
 dictdir=$( echo $PWD )
@@ -2684,13 +2990,27 @@ case $pkgname in
     ;;
     $xproto|$xlib|$xapp|$xfont)
       if $as_root; then
-echo 'set +e
+        echo 'set +e
 touch ${PkgUserDir}/${PkgName}/.${PkgName}' >> $Output
       else
-echo "set +
+        echo "set +
 touch ~/.${pkgname}" >> $Output
       fi
-    ;;      
+    ;;
+    udev) # need to know when udev-extras has been installed
+      if $as_root; then
+        echo 'touch ${PkgUserDir}/${PkgName}/.${PkgName}_extras' >> $Output
+      else
+        echo "touch ~/.${pkgname}_extras" >> $Output
+      fi
+    ;;
+    systemd) # need to know when systemd with gudev has been installed
+      if $as_root; then
+        echo 'touch ${PkgUserDir}/${PkgName}/.${PkgName}_gudev' >> $Output
+      else
+        echo "touch ~/.${pkgname}_gudev" >> $Output
+      fi
+    ;;
     *)
       if $as_root; then
         echo 'touch ${PkgUserDir}/${PkgName}/.${PkgName}' >> $Output
@@ -2718,13 +3038,17 @@ case $pkgname in
   blfs-btscrpts|cacerts|firewall|java-hamcrest|$xapp|$xfont|$xlib|$xproto|xterm)
      : # don't delete any files
   ;;
+  gimp) # delete the help dir as well
+     delSrcFile >> $Output
+     echo "if [ -e \$helpdir ]; then rm -rf \$helpdir; fi" >> $Output
+  ;;
   mesalib) # delete the glu dir as well
      delSrcFile >> $Output
      echo "if [ -e \$gludir ]; then rm -rf \$gludir; fi" >> $Output
   ;;
-  gimp) # delete the help dir as well
+  py2-atspi|py3-atspi)
      delSrcFile >> $Output
-     echo "if [ -e \$helpdir ]; then rm -rf \$helpdir; fi" >> $Output
+     echo "rm -rf python*" >> $Output
   ;;
   webkitgtk) # unset CPPFLAGS as well (suppress warnings in gcc-4.8.0)
      delSrcFile >> $Output
@@ -2758,9 +3082,9 @@ if [ "$(grep -q ^$PkgName\: /etc/passwd;echo $?)" != 0 ]; then
   elif [ "$(grep -q ^install2\: /etc/group;echo $?)" = 0 ]; then
     numcharInstall install2
     if [ $numchars -gt 2030 ]; then
-      echo "Yoiks, what a lot of packages you've installed"
-      echo "You'll have to make yet another install group - install3"
-      echo "Update /usr/sbin/installpkg as before"
+      echo "Install2 has nearly reached the limit of 2048 chars"
+      echo "Make another install group - install3, in /etc/group"
+      echo "Update /usr/sbin/installpkg to use install3"
       exit 1
     fi
   else
@@ -2877,8 +3201,28 @@ EOF
            cat >> $Output << "EOF"
 chgrp install /usr/share/sounds
 chmod g+w,o+t /usr/share/sounds
-chgrp install /lib/systemd/system/basic.target.wants
-chmod g+w,o+t /lib/systemd/system/basic.target.wants
+if [ -d /usr/lib/udev ]; then
+  chgrp install /usr/lib/udev
+  chmod g+w,o+t /usr/lib/udev
+  chgrp install /usr/lib/udev/rules.d
+  chmod g+w,o+t /usr/lib/udev/rules.d
+fi
+if [ -d /usr/lib/systemd/system/basic.target.wants ]; then
+  chgrp install /usr/lib/systemd/system/basic.target.wants
+  chmod g+w,o+t /usr/lib/systemd/system/basic.target.wants
+fi
+if [ -e /usr/lib/systemd/system/alsa-restore.service ]; then
+  sed -i 's/oneshop/oneshot/' /usr/lib/systemd/system/alsa-restore.service
+fi
+if [ ! -d /var/lib/alsa ]; then
+  install -v -m0755 -d /var/lib/alsa
+  chown alsa-utils:alsa-utils /var/lib/alsa
+fi
+if [ "$SYSTEMD" = yes ]; then
+  if [ ! -d /etc/pm/sleep.d ]; then install -v -m0755 -d /etc/pm/sleep.d; fi
+  install -D -m755 ${blfsfiles}/conf-files/90alsa /etc/pm/sleep.d/90alsa
+  chown alsa-utils:alsa-utils /etc/pm/sleep.d/90alsa
+fi
 EOF
     ;;
     apache)
@@ -2962,6 +3306,7 @@ chgrp install /usr/share/help/*
 chmod g+w,o+t /usr/share/help/*
 chown rarian:rarian /usr/share/help/rarian.document
 chmod 644 /usr/share/help/rarian.document
+sed -i '/MimeType/d' /usr/share/applications/baobab.desktop
 EOF
     ;;
     bind)
@@ -3011,6 +3356,8 @@ chgrp install /usr/share/cups/data # for cups-filters
 chmod g+w,o+t /usr/share/cups/data
 chgrp install /usr/share/cups/drv
 chmod g+w,o+t /usr/share/cups/drv
+chgrp install /usr/share/cups/ppdc
+chmod g+w,o+t /usr/share/cups/ppdc
 chgrp install /etc/cups
 chmod g+w,o+t /etc/cups
 chgrp install /usr/lib/cups/backend
@@ -3083,6 +3430,16 @@ chgrp install /etc/ld.so.conf
 chmod 664 /etc/ld.so.conf
 EOF
     ;;
+    cyrus-sasl)
+       if [ "$SYSTEMD" = yes ]; then
+          cat >> $Output << "EOF"
+install -Dm644 ${blfsfiles}/conf-files/saslauthd.conf.d /etc/conf.d/saslauthd
+install -Dm644 ${blfsfiles}/service/saslauthd.service /usr/lib/systemd/system/saslauthd.service
+install -Dm644 ${blfsfiles}/conf-files/sastmpfiles.conf /usr/lib/tmpfiles.d/saslauthd.conf
+chown cyrus-sasl:cyrus-sasl {/etc/conf.d/saslauthd,/usr/lib/{systemd/system/saslauthd.service,tmpfiles.d/saslauthd.conf}}
+EOF
+       fi
+    ;;
     dbus)
           cat >> $Output << "EOF"
 chgrp install /usr/lib/dbus-1.0
@@ -3099,6 +3456,7 @@ chgrp install /usr/share/dbus-1/system-services
 chmod g+w,o+t /usr/share/dbus-1/system-services
 chown root:messagebus /usr/lib/dbus-1.0/dbus-daemon-launch-helper
 chmod 4750 /usr/lib/dbus-1.0/dbus-daemon-launch-helper  # set uid root binary
+dbus-uuidgen --ensure # generate the dbus uuid
 EOF
     ;;
     dconf)
@@ -3206,8 +3564,8 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /var/cache
 chmod g+w,o+t /var/cache
-chgrp install /lib/udev
-chmod g+w,o+t /lib/udev
+chgrp install /usr/lib/udev
+chmod g+w,o+t /usr/lib/udev
 EOF
 echo "case \$(uname -m) in
    x86_64) archi=x86_64-linux
@@ -3228,14 +3586,6 @@ chgrp install /etc/xdg
 chmod g+w,o+t /etc/xdg
 chgrp install /etc/xdg/menus
 chmod g+w,o+t /etc/xdg/menus
-EOF
-    ;;
-    gcalctool)
-          cat >> $Output << "EOF"
-chgrp install /usr/share/help/bg
-chmod g+w,o+t /usr/share/help/bg
-chgrp install /usr/share/help/ko
-chmod g+w,o+t /usr/share/help/ko
 EOF
     ;;
     gconf)
@@ -3315,9 +3665,9 @@ GITEOF
 git config --global http.sslCAPath /etc/ssl/certs
 chgrp install /usr/share/locale/pt_PT
 chmod g+w,o+t /usr/share/locale/pt_PT
-install -D -m 644 ${blfsfiles}/service/git-daemon@.service /lib/systemd/system/git-daemon@.service
-install -D -m 644 ${blfsfiles}/service/git-daemon.socket /lib/systemd/system/git-daemon.socket
-chown git:git /lib/systemd/system/git-daemon*
+install -D -m 644 ${blfsfiles}/service/git-daemon@.service /usr/lib/systemd/system/git-daemon@.service
+install -D -m 644 ${blfsfiles}/service/git-daemon.socket /usr/lib/systemd/system/git-daemon.socket
+chown git:git /usr/lib/systemd/system/git-daemon*
 EOF
     ;;
     glib)
@@ -3328,6 +3678,12 @@ chgrp install /usr/lib/gio/modules # for dconf
 chmod g+w,o+t /usr/lib/gio/modules
 chgrp install /usr/share/bash-completion/completions
 chmod g+w,o+t /usr/share/bash-completion/completions
+EOF
+    ;;
+    gnm-thems-stndrd)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/icons/HighContrast/scalable/apps
+chmod g+w,o+t /usr/share/icons/HighContrast/scalable/apps
 EOF
     ;;
     gnm-user-share)
@@ -3419,12 +3775,6 @@ chgrp install /usr/lib/mozilla/plugins
 chmod g+w,o+t /usr/lib/mozilla/plugins
 EOF
     ;;
-    gnome-terminal)
-          cat >> $Output << "EOF"
-chgrp install /etc/gconf/schemas
-chmod g+w,o+t /etc/gconf/schemas
-EOF
-    ;;
     gnome-user-docs)
           cat >> $Output << "EOF"
 chgrp install /usr/share/help/*
@@ -3493,6 +3843,16 @@ chgrp install /etc/gconf/schemas
 chmod g+w,o+t /etc/gconf/schemas
 EOF
     ;;
+    gtk-doc)
+          cat >> $Output << "EOF"
+chgrp install /usr/share/help/*
+chmod g+w,o+t /usr/share/help/*
+if [ -e /usr/share/help/rarian.document ]; then
+  chown rarian:rarian /usr/share/help/rarian.document
+  chmod 644 /usr/share/help/rarian.document
+fi
+EOF
+    ;;
     gtk-engines)
           cat >> $Output << "EOF"
 chgrp install /usr/share/themes/Crux
@@ -3523,6 +3883,8 @@ chgrp install /usr/lib/gtk-2.0/2.10.0/engines
 chmod g+w,o+t /usr/lib/gtk-2.0/2.10.0/engines
 chgrp install /usr/lib/gtk-2.0/modules
 chmod g+w,o+t /usr/lib/gtk-2.0/modules
+chgrp install /usr/lib/gtk-2.0/2.10.0/immodules # for ibus
+chmod g+w,o+t /usr/lib/gtk-2.0/2.10.0/immodules
 EOF
     ;;
     gutenprint)
@@ -3578,6 +3940,12 @@ chmod g+w,o+t /usr/share/pkgconfig
 chmod g+w,o+t /usr/share/locale/*/LC_MESSAGES
 chgrp install /usr/share/xml # for docbook-xml
 chmod g+w,o+t /usr/share/xml
+EOF
+    ;;
+    java-hamcrest)
+          cat >> $Output << "EOF"
+chgrp install /usr/share/java
+chmod g+w,o+t /usr/share/java
 EOF
     ;;
     libatasmart)   #/usr/share/vala/vapi
@@ -3668,8 +4036,8 @@ EOF
          cat >> $Output << "EOF"
 chown linux-pam:install /etc/pam.d
 chmod g+w,o+t /etc/pam.d
-chgrp install /lib/security # for consolekit
-chmod g+w,o+t /lib/security
+chgrp install /usr/lib/security # for consolekit
+chmod g+w,o+t /usr/lib/security
 chgrp install /etc/security # for libpwquality
 chmod g+w,o+t /etc/security
 EOF
@@ -3688,6 +4056,8 @@ EOF
           cat >> $Output << "EOF"
 chgrp install /usr/lib/nautilus
 chmod g+w,o+t /usr/lib/nautilus
+chgrp install /usr/lib/nautilus/extensions-3.0
+chmod g+w,o+t /usr/lib/nautilus/extensions-3.0
 chgrp install /usr/share/gnome-shell
 chmod g+w,o+t /usr/share/gnome-shell
 chgrp install /usr/share/gnome-shell/search-providers
@@ -3719,11 +4089,12 @@ EOF
     openssh)
        if [ "$SYSTEMD" = yes ]; then
           cat >> $Output << "EOF"
-install -Dm644 ${blfsfiles}/service/sshdgenkeys.service /lib/systemd/system/sshdgenkeys.service
-install -Dm644 ${blfsfiles}/service/sshd.service /lib/systemd/system/sshd.service
-install -Dm644 ${blfsfiles}/service/sshd.socket /lib/systemd/system/sshd.socket
+install -Dm644 ${blfsfiles}/service/sshdgenkeys.service /usr/lib/systemd/system/sshdgenkeys.service
+install -Dm644 ${blfsfiles}/service/sshd.service /usr/lib/systemd/system/sshd.service
+install -Dm644 ${blfsfiles}/service/sshd.socket /usr/lib/systemd/system/sshd.socket
+install -Dm644 ${blfsfiles}/service/sshd@.service /usr/lib/systemd/system/sshd@.service
 install -Dm644 ${blfsfiles}/conf-files/sshd.conf /usr/lib/tmpfiles.d
-chown openssh:openssh /lib/systemd/system/sshd*
+chown openssh:openssh /usr/lib/systemd/system/sshd*
 chown openssh:openssh /usr/lib/tmpfiles.d/sshd.conf
 EOF
        fi
@@ -3766,8 +4137,6 @@ EOF
     ;;
     php)
           cat >> $Output << "EOF"
-chgrp install /usr/lib/php/extensions/no-debug-zts-20100525
-chmod g+w,o+t /usr/lib/php/extensions/no-debug-zts-20100525
 cat >> /etc/httpd/httpd.conf << "PHPEOF"
 LoadModule php5_module /usr/lib/httpd/modules/libphp5.so
 AddType application/x-httpd-php .php
@@ -3821,12 +4190,24 @@ chgrp install /usr/include/pygtk-2.0
 chmod g+w,o+t /usr/include/pygtk-2.0
 EOF
     ;;
-    pygobject3)
+    py2-gobject3)
+          cat >> $Output << "EOF"
+chgrp install /usr/lib/python2.7/site-packages/gi
+chmod g+w,o+t /usr/lib/python2.7/site-packages/gi
+chgrp install /usr/lib/python2.7/site-packages/gi/overrides
+chmod g+w,o+t /usr/lib/python2.7/site-packages/gi/overrides
+chgrp install /usr/include/pygobject-3.0
+chmod g+w,o+t /usr/include/pygobject-3.0
+EOF
+    ;;
+    py3-gobject3)
           cat >> $Output << "EOF"
 chgrp install /usr/lib/python3.3/site-packages/gi
 chmod g+w,o+t /usr/lib/python3.3/site-packages/gi
 chgrp install /usr/lib/python3.3/site-packages/gi/overrides
 chmod g+w,o+t /usr/lib/python3.3/site-packages/gi/overrides
+chgrp install /usr/lib/python3.3/site-packages/gi/overrides/__pycache__
+chmod g+w,o+t /usr/lib/python3.3/site-packages/gi/overrides/__pycache__
 EOF
     ;;
     pygtk)
@@ -3849,10 +4230,28 @@ chgrp install /usr/lib/python3.3/site-packages #for python modules
 chmod g+w,o+t /usr/lib/python3.3/site-packages
 EOF
     ;;
+    qt4) # needed to create /usr/tests, so put back to owner root
+          cat >> $Output << "EOF"
+chown root:root /usr
+chmod 755 /usr
+EOF
+    ;;
     rarian)
            cat >> $Output << "EOF"
 chgrp install /usr/share/help
 chmod g+w,o+t /usr/share/help
+EOF
+    ;;
+    ruby)
+           cat >> $Output << "EOF"
+chgrp install /usr/lib/ruby/site_ruby/2.0.0 # for subversion
+chmod g+w,o+t /usr/lib/ruby/site_ruby/2.0.0
+chgrp install /usr/lib/ruby/site_ruby/2.0.0/x86_64-linux
+chmod g+w,o+t /usr/lib/ruby/site_ruby/2.0.0/x86_64-linux
+chgrp install /usr/lib/ruby/vendor_ruby/2.0.0
+chmod g+w,o+t /usr/lib/ruby/vendor_ruby/2.0.0
+chgrp install /usr/lib/ruby/vendor_ruby/2.0.0/x86_64-linux
+chmod g+w,o+t /usr/lib/ruby/vendor_ruby/2.0.0/x86_64-linux
 EOF
     ;;
     samba)
@@ -3887,6 +4286,14 @@ EOF
     subversion) # write the PYTHONPATH variable to profile.d
           cat >> $Output << "EOF"
 echo "export PYTHONPATH=/usr/lib/svn-python" >> /etc/profile.d/python3.sh
+if [ "$SYSTEMD" = yes ]; then
+  install -D -m 644 ${blfsfiles}/service/svnserve.service /usr/lib/systemd/system/svnserve.service
+  install -D -m 644 ${blfsfiles}/conf-files/svnserve.tmpfiles /usr/lib/tmpfiles.d/svnserve.conf
+  install -D -m 644 ${blfsfiles}/conf-files/svnserve.conf /etc/conf.d/svnserve
+  chown subversion:subversion /usr/lib/systemd/system/svnserve.service
+  chown subversion:subversion /usr/lib/tmpfiles.d/svnserve.conf
+  chown subversion:subversion /etc/conf.d/svnserve
+fi
 EOF
     ;;
     sudo)
@@ -3897,14 +4304,21 @@ chown root /usr/lib/sudo/sudoers.so
 chown root /etc/sudoers
 chown root /etc/sudoers.d
 chmod 444  /etc/sudoers
+chown root /var/lib/sudo
+# add your username to /etc/sudoers so you can sudo
+sed -i 's/root ALL=(ALL) ALL/root ALL=(ALL) ALL\njohn ALL=(ALL) ALL/' /etc/sudoers
 EOF
     ;;
     systemd)
           cat >> $Output << "EOF"
 chgrp install /usr/share/dbus-1/interfaces # for upower
 chmod g+w,o+t /usr/share/dbus-1/interfaces
-chgrp install /lib/systemd/system-sleep
-chmod g+w,o+t /lib/systemd/system-sleep
+chgrp install /usr/lib/systemd/system-sleep
+chmod g+w,o+t /usr/lib/systemd/system-sleep
+chgrp install /usr/share/polkit-1
+chmod g+w,o+t /usr/share/polkit-1
+chgrp install /usr/share/polkit-1/actions
+chmod g+w,o+t /usr/share/polkit-1/actions
 sed -i "/session   required    pam_unix.so/a session   optional    pam_systemd.so\nsession   optional    pam_loginuid.so" /etc/pam.d/system-session
 EOF
     ;;
@@ -3946,8 +4360,8 @@ EOF
     ;;
     udev)
           cat >> $Output << "EOF"
-chgrp install /lib/udev/rules.d
-chmod g+w,o+t /lib/udev/rules.d
+chgrp install /usr/lib/udev/rules.d
+chmod g+w,o+t /usr/lib/udev/rules.d
 chgrp install /etc/udev
 chmod g+w,o+t /etc/udev
 EOF
@@ -4028,8 +4442,6 @@ EOF
     ;;
     $xlib)
            cat >> $Output << "EOF"
-chgrp install /usr/lib/X11
-chmod g+w,o+t /usr/lib/X11
 chgrp install /usr/share/X11
 chmod g+w,o+t /usr/share/X11
 EOF
@@ -4114,8 +4526,14 @@ chown xterm:xterm /usr/share/terminfo/x/xterm-vi
 chown xterm:xterm /usr/share/terminfo/x/xterm-xmc
 chgrp install /usr/share/pixmaps # for evol-data-server
 chmod g+w,o+t /usr/share/pixmaps
+cat >> /etc/X11/app-defaults/XTerm << "XTERMEOF"
+*VT100*locale: true
+*VT100*faceName: Monospace
+*VT100*faceSize: 10
+*backarrowKeyIsErase: true
+*ptyInitialErase: true
+XTERMEOF
 EOF
-echo "ln -vsf $XORG_PREFIX /usr/X11R6" >> $Output
     ;;
     xulrunner)
           cat >> $Output << "EOF"
@@ -4143,7 +4561,7 @@ case $pkgname in
     alsa-utils)
           cat >> $Output << "EOF"
 touch /var/lib/alsa/asound.state
-alsactl store
+/usr/sbin/alsactl store
 usermod -a -G audio john # replace john with your username
 EOF
     ;;
@@ -4156,9 +4574,9 @@ EOF
     apache)
           cat >> $Output << "EOF"
 if [ "$SYSTEMD" = yes ]; then
-  install -m644 ${blfsfiles}/service/httpd.service /lib/systemd/system/httpd.service
+  install -m644 ${blfsfiles}/service/httpd.service /usr/lib/systemd/system/httpd.service
   install -Dm644 ${blfsfiles}/conf-files/httpd.conf /usr/lib/tmpfiles.d
-  chown apache:apache /lib/systemd/system/httpd.service
+  chown apache:apache /usr/lib/systemd/system/httpd.service
   chown apache:apache /usr/lib/tmpfiles.d/httpd.conf
 fi
 EOF
@@ -4183,11 +4601,16 @@ echo "****************************************"
 echo "Edit /etc/resolv.conf to suit your needs"
 echo "****************************************"
 if [ "$SYSTEMD" = yes ]; then
-  install -D -m644 ${blfsfiles}/conf-files/named.conf /usr/lib/tmpfiles.d
-  install -D -m644 ${blfsfiles}/service/named.service /lib/systemd/system
+  install -D -m644 ${blfsfiles}/conf-files/tmpfiles.d /usr/lib/tmpfiles.d/named.conf
+  install -D -m644 ${blfsfiles}/service/named.service /usr/lib/systemd/system
   chown named:named /usr/lib/tmpfiles.d/named.conf
-  chown named:named /lib/systemd/system/named.service
+  chown named:named /usr/lib/systemd/system/named.service
 fi
+install -D -m640 -o 0 -g 20 ${blfsfiles}/conf-files/named.conf /etc/named.conf
+install -d -m770 -o 0 -g 20 /var/named
+install    -m640 -o 0 -g 20 ${blfsfiles}/zone/root.hint /var/named
+install    -m640 -o 0 -g 20 ${blfsfiles}/zone/127.0.0.zone /var/named
+install    -m640 -o 0 -g 20 ${blfsfiles}/zone/localhost.zone /var/named
 EOF
     ;;
     cracklib)
@@ -4225,8 +4648,8 @@ EOFCUPS
 chown root:lp /etc/cups/printers.conf
 chmod 600 /etc/cups/printers.conf
 if [ "$SYSTEMD" = yes ]; then
-  install -Dm644 ${blfsfiles}/service/cupsd.service /lib/systemd/system
-  chown cups:cups /lib/systemd/system/cupsd.service
+  install -Dm644 ${blfsfiles}/service/cupsd.service /usr/lib/systemd/system
+  chown cups:cups /usr/lib/systemd/system/cupsd.service
   cat > /etc/udev/rules.d/10-local.rules << "RULESEOF"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="413c", ATTRS{idProduct}=="5603", GROUP="lp", MODE:="664"
 RULESEOF
@@ -4237,9 +4660,9 @@ EOF
     dhcpcd)
           cat >> $Output << "EOF"
 if [ "$SYSTEMD" = yes ]; then
-  install -Dm644 ${blfsfiles}/service/dhcpcd_.service /lib/systemd/system/dhcpcd@.service
-  install -Dm644 ${blfsfiles}/service/dhcpcd.service /lib/systemd/system/dhcpcd.service
-  chown dhcpcd:dhcpcd /lib/systemd/system/{dhcpcd@.service,dhcpcd.service}
+  install -Dm644 ${blfsfiles}/service/dhcpcd_.service /usr/lib/systemd/system/dhcpcd@.service
+  install -Dm644 ${blfsfiles}/service/dhcpcd.service /usr/lib/systemd/system/dhcpcd.service
+  chown dhcpcd:dhcpcd /usr/lib/systemd/system/{dhcpcd@.service,dhcpcd.service}
 fi
 EOF
     ;;
@@ -4264,14 +4687,6 @@ iptables -t filter -A FORWARD -i wlp3s0 -o wlp3s0 -p tcp --dport 80 -j ACCEPT
 ADDRULES
 EOF
     ;;
-    gdm)
-          cat >> $Output << "EOF"
-if [ "$SYSTEMD" = yes ]; then
-  install -m644 ${blfsfiles}/service/gdm.service /lib/systemd/system/gdm.service
-  chown gdm:gdm /lib/systemd/system/gdm.service
-fi
-EOF
-    ;;
     gnome-session)
           cat >> $Output << "EOF"
 cat > ~/.xinitrc << "EOL"
@@ -4287,8 +4702,8 @@ EOF
     gpm)
           cat >> $Output << "EOF"
 if [ "$SYSTEMD" = yes ]; then
-  install -m644 ${blfsfiles}/service/gpm.service /lib/systemd/system/gpm.service
-  chown gpm:gpm /lib/systemd/system/gpm.service
+  install -m644 ${blfsfiles}/service/gpm.service /usr/lib/systemd/system/gpm.service
+  chown gpm:gpm /usr/lib/systemd/system/gpm.service
 fi
 EOF
     ;;
@@ -4297,49 +4712,68 @@ EOF
 if [ "$SYSTEMD" = yes ]; then
   install -v -d /etc/iptables
   install -v -d /etc/conf.d
-  if [ ! -e /etc/sysctl.conf ]; then
-    install -D -m644 ${blfsfiles}/conf-files/sysctl.conf /etc
-  fi
+# remove the procps version of sysctl.conf
+  rm -rf /etc/sysctl.conf
+  install -D -m644 ${blfsfiles}/conf-files/sysctl.conf /etc
   install -D -m644 ${blfsfiles}/conf-files/iptables.conf.d /etc/conf.d/iptables
   install -D -m644 ${blfsfiles}/iptables.rules /etc/iptables/iptables.rules
-  install -Dm644 ${blfsfiles}/service/{iptables.service,ip6tables.service} /lib/systemd/system
-  chown iptables:iptables /etc/conf.d/iptables
-  chown iptables:iptables /etc/iptables/iptables.rules
-  chown iptables:iptables /lib/systemd/system/{iptables.service,ip6tables.service}
-  sed -i -e 's/net.ipv4.ip_forward = 0/net.ipv4.ip_forward = 1/' \
-         -e 's/net.ipv6.conf.all.forwarding = 0/net.ipv6.conf.all.forwarding = 1/' /etc/sysctl.conf
-   cat >> /etc/sysctl.conf << "CTLEOF"
-net.ipv6.conf.default.forwarding = 1
-CTLEOF
+  install -Dm644 ${blfsfiles}/service/{iptables.service,ip6tables.service} /usr/lib/systemd/system
+  chown iptables:iptables /etc/{sysctl.conf,conf.d/iptables,iptables/iptables.rules}
+  chown iptables:iptables /usr/lib/systemd/system/{iptables.service,ip6tables.service}
 fi
 EOF
     ;;
     isl)
           cat >> $Output << "EOF"
-mv /usr/lib/libisl.so.10.1.2-gdb.py /usr/share/gdb/auto-load/usr/lib/
+mv /usr/lib/libisl.so.10.2.1-gdb.py /usr/share/gdb/auto-load/usr/lib/
 EOF
+    ;;
+    jdkbin) # update man_db.conf
+          cat >> $Output << "EOF"
+cat >> /etc/man_db.conf << "MANDBEOF"
+MANDATORY_MANPATH     /opt/jdk/man
+MANPATH_MAP           /opt/jdk/bin     /opt/jdk/man
+MANDB_MAP             /opt/jdk/man     /var/cache/man/jdk
+MANDBEOF
+mandb -c /opt/jdk/man
+chgrp install /opt/jdk/jre
+chmod 1775 /opt/jdk/jre
+chgrp install /opt/jdk/jre/{lib,bin}
+chmod 1775 /opt/jdk/jre/{lib,bin}
+chgrp install /opt/jdk/man/man1
+chmod 1775 /opt/jdk/man/man1
+EOF
+if $as_root; then
+          cat >> $Output << "EOF"
+chown -h -R root:root /opt/jdk
+EOF
+else
+  echo "chown -h -R jdkbin:jdkbin /opt/jdk-${jdkvers}" >> $Output
+fi
     ;;
     krb5)
           cat >> $Output << "EOF"
 if [ "$SYSTEMD" = yes ]; then
-  install -m 644 ${blfsfiles}/service/krb5-{kadmind.service,kdc.service,kpropd.service,kpropd@.service,kpropd.socket} /lib/systemd/system
-  chown krb5:krb5 /lib/systemd/system/krb5-*
+  install -m 644 ${blfsfiles}/service/krb5-{kadmind.service,kdc.service,kpropd.service,kpropd@.service,kpropd.socket} /usr/lib/systemd/system
+  chown krb5:krb5 /usr/lib/systemd/system/krb5-*
 fi
 EOF
     ;;
     libgphoto2)
           cat >> $Output << "EOF"
-rm -f /usr/lib/udev/*
-rm -f  /usr/include/gphoto2/gphoto2
+rm -rf  /usr/include/gphoto2/gphoto2
 rm -rf /opt/qt # qt4 will create this symlink
-install -m755 -d /usr/lib/udev/rules.d
+if [ ! -d /usr/lib/udev/rules.d ]; then
+  install -v -m0755 -d /usr/lib/udev/rules.d
+fi
 touch /usr/lib/udev/rules.d/40-gphoto.rules
+chown libgphoto2:libgphoto2 /usr/lib/udev/rules.d/40-gphoto.rules
 EOF
     ;;
     linux-pam)   #/etc/pam.d
           cat >> $Output << "EOF"
-chown root /sbin/unix_chkpwd
-chmod -v 4755 /sbin/unix_chkpwd
+chown root /usr/sbin/unix_chkpwd
+chmod -v 4755 /usr/sbin/unix_chkpwd
 cat > /etc/pam.d/other << "PAMEND"
 # Begin /etc/pam.d/other
 auth            required        pam_unix.so     nullok
@@ -4348,35 +4782,49 @@ session         required        pam_unix.so
 password        required        pam_unix.so     nullok
 # End /etc/pam.d/other
 PAMEND
+cat > /etc/security/limits.conf << "_EOT"
+# Begin /etc/security/limits.conf
+
+*               -       rtprio          0
+*               -       nice            0
+@audio          -       rtprio          65
+@audio          -       nice           -10
+@audio          -       memlock         40000
+
+# End /etc/security/limits.conf
+_EOT
+chown linux-pam:linux-pam /etc/security/limits.conf
 EOF
     ;;
     lvm2)
            cat >> $Output << "EOF"
 if [ "$SYSTEMD" = yes ]; then
-  install -D -m644 ${blfsfiles}/service/dmeventd.service /lib/systemd/system/dmeventd.service
-  install -D -m644 ${blfsfiles}/service/dmeventd.socket /lib/systemd/system/dmeventd.socket
-  ln -sf ../dmeventd.socket /lib/systemd/system/sockets.target.wants/dmeventd.socket
-  install -D -m644 ${blfsfiles}/service/lvm-monitoring.service /lib/systemd/system/lvm-monitoring.service
-  install -D -m644 ${blfsfiles}/service/lvmetad.service /lib/systemd/system/lvmetad.service
-  install -D -m644 ${blfsfiles}/service/lvmetad.socket /lib/systemd/system/lvmetad.socket
-  ln -sf ../lvmetad.socket /lib/systemd/system/sockets.target.wants/lvmetad.socket
-chown lvm2:lvm2 /lib/systemd/system/{dmeventd.*,lvm*}
-chown -h lvm2:lvm2 /lib/systemd/system/sockets.target.wants/{dmeventd.*,lvmetad.*}
+  install -D -m644 ${blfsfiles}/service/dmeventd.service /usr/lib/systemd/system/dmeventd.service
+  install -D -m644 ${blfsfiles}/service/dmeventd.socket /usr/lib/systemd/system/dmeventd.socket
+  ln -sf ../dmeventd.socket /usr/lib/systemd/system/sockets.target.wants/dmeventd.socket
+  install -D -m644 ${blfsfiles}/service/lvm-monitoring.service /usr/lib/systemd/system/lvm-monitoring.service
+  install -D -m644 ${blfsfiles}/service/lvmetad.service /usr/lib/systemd/system/lvmetad.service
+  install -D -m644 ${blfsfiles}/service/lvmetad.socket /usr/lib/systemd/system/lvmetad.socket
+  ln -sf ../lvmetad.socket /usr/lib/systemd/system/sockets.target.wants/lvmetad.socket
+chown lvm2:lvm2 /usr/lib/systemd/system/{dmeventd.*,lvm*}
+chown -h lvm2:lvm2 /usr/lib/systemd/system/sockets.target.wants/{dmeventd.*,lvmetad.*}
 fi
 EOF
     ;;
     mysql)
           cat >> $Output << "EOF"
+install -Dm644 /usr/share/mysql/my-medium.cnf /etc/mysql/my.cnf
+chown mysql:mysql /etc/mysql/my.cnf
 if [ "$SYSTEMD" = yes ]; then
-  install -Dm755 ${blfsfiles}/service/mysqld-post.sh /usr/bin/mysqld-post
-  install -m644 ${blfsfiles}/service/mysql.service /lib/systemd/system/mysql.service
-  chown mysql:mysql /lib/systemd/system/mysql.service
+  install -Dm755 ${blfsfiles}/service/mariadb-post.sh /usr/bin/mysqld-post
+  install -m644 ${blfsfiles}/service/mariadb.service /usr/lib/systemd/system/mysqld.service
+  install -m644 ${blfsfiles}/conf-files/mariadb-tmpfile.conf /usr/lib/tmpfiles.d/mysql.conf
+  chown mysql:mysql /usr/lib/systemd/system/mysqld.service
   chown mysql:mysql /usr/bin/mysqld-post
-  install -m644 ${blfsfiles}/conf-files/mysql.conf /usr/lib/tmpfiles.d/mysql.conf
   chown mysql:mysql /usr/lib/tmpfiles.d/mysql.conf
   echo "*****************************************************************"
   echo "*                                                               *"
-  echo "* The mysql root password is currently blank.                    *"
+  echo "* The mysql root password is currently blank.                   *"
   echo "* The first time you start the mysql daemon, do                 *"
   echo "* /usr/bin/mysql_secure_installation to set up the password     *"
   echo "*                                                               *"
@@ -4384,7 +4832,7 @@ if [ "$SYSTEMD" = yes ]; then
 else
   echo "*****************************************************************"
   echo "*                                                               *"
-  echo "* The mysql root password is currently blank.                    *"
+  echo "* The mysql root password is currently blank.                   *"
   echo "* After this do: mysqld_safe --user=mysql 2>&1 >/dev/null &     *"
   echo "* to start the mysql server                                     *" 
   echo "* and /usr/bin/mysql_secure_installation to set up the password *"
@@ -4396,26 +4844,10 @@ chgrp -v mysql /srv/mysql{,/test,/mysql}
 install -v -m755 -o mysql -g mysql -d /var/run/mysqld
 EOF
     ;;
-    openjdk) # update man_db.conf
+    nettle) # remove static libs
           cat >> $Output << "EOF"
-cat >> /etc/man_db.conf << "MANDBEOF"
-MANDATORY_MANPATH     /opt/OpenJDK/man
-MANPATH_MAP           /opt/OpenJDK/bin     /opt/OpenJDK/man
-MANDB_MAP             /opt/OpenJDK/man     /var/cache/man/OpenJDK
-MANDBEOF
-mandb -c /opt/OpenJDK/man
-chgrp install /opt/OpenJDK/jre
-chmod 1775 /opt/OpenJDK/jre
-chgrp install /opt/OpenJDK/jre/{lib,bin}
-chmod 1775 /opt/OpenJDK/jre/{lib,bin}
-chgrp install /opt/OpenJDK/man/man1
-chmod 1775 /opt/OpenJDK/man/man1
+rm -f /usr/lib/{libhogweed,libnettle}.a
 EOF
-if $as_root; then
-          cat >> $Output << "EOF"
-chown -R root:root /opt/OpenJDK-1.7.0.9
-EOF
-fi
     ;;
     openssl) # install /etc/pam.d for linux-pam
           cat >> $Output << "EOF"
@@ -4452,46 +4884,35 @@ EOF
     python3)
           cat >> $Output << "EOF"
 cat > /etc/profile.d/python3.sh << "PYEOF"
-export PYTHONDOCS=/usr/share/doc/Python-3.3.1/html
+EOF
+echo "export PYTHONDOCS=/usr/share/doc/python-${Python3vers}/html" >> $Output
+          cat >> $Output << "EOF"
 PYEOF
 chown python3:python3 /etc/profile.d/python3.sh
 EOF
     ;;
-    samba) # create /etc/samba/smb.conf
+    samba) # install systemd files
           cat >> $Output << "EOF"
-cat > /etc/samba/samba.conf << "EOFSAMBA"
-[global]
-    workgroup = HOMEGROUP
-    dos charset = cp850
-    unix charset = ISO-8859-1
-#    server string =
-#    security =
-#    hosts allow =
-#    load printers =
-#    log file =
-#    max log size =
-#    socket options =
-#    local master =
-
-[homes]
-    comment = Home Directories
-    browseable = no
-    writable = yes
-
-[printers]
-    comment = All Printers
-    path = /var/spool/samba
-    browseable = no
-    guest ok = no
-    printable = yes
-EOFSAMBA
+if [ "$SYSTEMD" = yes ]; then
+  install -m644 ${blfsfiles}/service/{samba.service,nmbd.service,smbd.service,smbd@.service,swat@.service,winbindd.service} /usr/lib/systemd/system
+  install -m644 ${blfsfiles}/service/{smbd.socket,swat.socket} /usr/lib/systemd/system/
+  install -m644 ${blfsfiles}/conf-files/samba.conf.d /etc/conf.d/samba
+  install -D -m644 ${blfsfiles}/conf-files/samba.conf /usr/lib/tmpfiles.d/samba.conf
+  chown samba:samba /usr/lib/systemd/system/{samba.service,nmbd.service,smbd.service,smbd@.service,swat@.service,winbindd.service,smbd.socket,swat.socket}
+  chown samba:samba /etc/conf.d/samba
+  chown samba:samba /usr/lib/tmpfiles.d/samba.conf
+fi
+install -D -m644 ${blfsfiles}/conf-files/samba.pam /etc/pam.d/samba
+install -d -m1777 /var/spool/samba
+chown samba:samba /etc/pam.d/samba
+chown samba:samba /var/spool/samba
 EOF
     ;;
     speechd)
           cat >> $Output << "EOF"
 if [ "$SYSTEMD" = yes ]; then
-  install -Dm644 ${blfsfiles}/service/speechd.service /lib/systemd/system/speech-dispatcherd.service
-  chown speechd:speechd /lib/systemd/system/speech-dispatcherd.service
+  install -Dm644 ${blfsfiles}/service/speechd.service /usr/lib/systemd/system/speech-dispatcherd.service
+  chown speechd:speechd /usr/lib/systemd/system/speech-dispatcherd.service
   install -v -d /var/log/speech-dispatcher
 fi
 EOF
@@ -4504,8 +4925,8 @@ install -v -d /var/log/squid
 touch /var/log/squid/access.log
 chown -R proxy:proxy /var/log/squid
 if [ "$SYSTEMD" = yes ]; then
-  install -Dm644 ${blfsfiles}/service/squid.service /lib/systemd/system/squid.service
-  chown squid:squid /lib/systemd/system/squid.service
+  install -Dm644 ${blfsfiles}/service/squid.service /usr/lib/systemd/system/squid.service
+  chown squid:squid /usr/lib/systemd/system/squid.service
 else
   cp ${blfsfiles}/squid /etc/rc.d/init.d
   chmod 755 /etc/rc.d/init.d/squid
@@ -4519,13 +4940,6 @@ else
   chown -h squid:squid /etc/rc.d/*/K29squid
   chown -h squid:squid /etc/rc.d/*/S35squid
 fi
-EOF
-    ;;
-    sudo)
-          cat >> $Output << "EOF"
-cat >> /etc/sudoers << "SUDO"
-x7lib ALL=(ALL) NOPASSWD: ALL
-SUDO
 EOF
     ;;
     usbutils) # run update-usbids
@@ -4601,7 +5015,7 @@ case $pkgname in
         links=""
     ;;
     cups-filters)
-        doFirst="if [ -e /usr/share/cups/mime ]; then rm /usr/share/cups/mime; fi"
+        doFirst=""
         links="/usr/lib/cups/backend /usr/lib/cups/filter"
     ;;
     dbus)
@@ -4676,6 +5090,10 @@ case $pkgname in
         doFirst=""
         links="/bin/hostname"
     ;;
+    openjdk)
+        doFirst=""
+        links="/opt/jdk"
+    ;;
     openssh)
         doFirst="install -v -m700 -d /var/lib/sshd && chown -v root:sys /var/lib/sshd && groupadd -g 50 sshd && useradd -c 'sshd PrivSep' -d /var/lib/sshd -g sshd -s /bin/false -u 50 sshd"
         links=""
@@ -4692,16 +5110,24 @@ case $pkgname in
         doFirst="rm /usr/bin/python && ln -svf python3 /usr/bin/python"
         links=""
     ;;
-    pygobject3)
+    py3-dbus) # give access to /usr/include/dbus-1.0/dbus/dbus-python.h
+        doFirst=""
+        links="/usr/include/dbus-1.0/dbus/dbus-python.h /usr/share/doc/{dbus-python-1.2.0,dbus-python-1.2.0/*} /usr/lib/pkgconfig/dbus-python.pc"
+    ;;
+    py2-gobject3)
         doFirst=""
         links="/usr/lib/python2.7/site-packages/gi/{repository/*,overrides/*,_gi*,*.p*}"
+    ;;
+    py3-gobject3)
+        doFirst=""
+        links="/usr/include/pygobject-3.0/pygobject.h /usr/lib/pkgconfig/pygobject-3.0.pc"
     ;;
     python3)
         doFirst=""
         links="/usr/bin/2to3"
     ;;
     qt4)
-        doFirst="chgrp install /etc/ld.so.conf && chmod 664 /etc/ld.so.conf"
+        doFirst="chgrp install /etc/ld.so.conf && chmod 664 /etc/ld.so.conf && chgrp install /usr && chmod 1775 /usr && if [ ! -d /usr/share/applications ]; then install -m0755 -d /usr/share/applications; fi && chgrp install /usr/share/applications && chmod 1775 /usr/share/applications"
         links=""
     ;;
     shadow)
@@ -4709,11 +5135,18 @@ case $pkgname in
         links="/bin/su /bin/passwd /etc/pam.d/other"
     ;;
     shrd-mime-info)
-        doFirst=""
+        doFirst="if [ -d /usr/share/mime/packages ]; then
+  chgrp install /usr/share/mime/packages
+  chmod 1775 /usr/share/mime/packages
+fi"
         links="/usr/share/mime/packages/freedesktop.org.xml"
     ;;
     squid)
-        doFirst='groupadd -g 39 proxy && useradd -c "Squid Cache User" -d /var/cache/squid -u 39 -g proxy -s /bin/false proxy'
+        doFirst='groupadd -g 38 proxy && useradd -c "Squid Cache User" -d /var/cache/squid -u 38 -g proxy -s /bin/false proxy'
+        links=""
+    ;;
+    subversion) # needs to install to /usr/libexec
+        doFirst="install -v -m0755 -d /usr/libexec && chgrp install /usr/libexec && chmod 1775 /usr/libexec"
         links=""
     ;;
     talloc)
@@ -4735,7 +5168,7 @@ fi"
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
-    epiphany|evol-data-server|folks|gcalctool|gnome-contacts|gnome-dictionary|gnome-set-daemon|metacity|tpthymisscntrl)
+    epiphany|evol-data-server|folks|gnome-calculator|gnome-contacts|gnome-dictionary|gnome-set-daemon|metacity|tpthymisscntrl)
         doFirst=""
         links="/usr/share/glib-2.0/schemas/gschemas.compiled"
     ;;
@@ -4785,7 +5218,8 @@ echo "srcpkg=\"${1}\"
 if [ ! -e \$srcpkg ]; then
   wget $wgetopts ${2}\${srcpkg}
 fi" >> $Output
-wgetopts=""
+# remove any --no-check-certificate
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 case $pkgname in
    espeak) # a zip file downloaded
            cat << "EOF"
@@ -4833,6 +5267,13 @@ EOF
 cd $(tar vxf /usr/src/core/gcc/gcc-*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
+   boost_) # need a patch
+    cat << "EOF"
+cp ${blfsfiles}/patches/libraries/boost_1_54_0-fix-new-glibc-1.patch .
+cp ${sourcedir}/${SrcName}*.* .
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+   ;;
    certdata.txt) # copy certdata.txt to pkguser dir
     cat << "EOF"
 cp ${sourcedir}/${SrcName} .
@@ -4849,21 +5290,19 @@ cp ${sourcedir}/${SrcName}*.*z* .
 cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   cups-1)
+   cups-1) # need a patch from patches/pst
     cat << "EOF"
-if [ ! -e ${sourcedir}/cups-systemd-socket.patch ]; then
-  echo "cups-systemd-socket.patch not in $sourcedir"
-  echo "Please place it there in order to continue"
-  exit 1
-else
-  cp ${sourcedir}/cups-systemd-socket.patch .
-fi
+cp ${blfsfiles}/patches/pst/cups-systemd-socket.patch .
 cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   avr-libc-|cloog-|docutils-|dotconf-|espeak-|ExtUtils-Depends-|ExtUtils-PkgConfig-|ffmpegthumbnailer-|foomatic-filters-|gnome-common-|isl-|iw-|libcdio-|libgphoto2-|libproxy-|libwebp-|nmap-|pa_stable_|pycairo-|pyxdg-|ragel-|speech-dispatcher-|squid-|v4l-utils-|wavpack-|x264-|yelp-tools-) # wget the source file for each of these
+   avr-libc-|apache-ant-|cloog-|dialog|docutils-|dotconf-|espeak-|ExtUtils-Depends-|ExtUtils-PkgConfig-|ffmpegthumbnailer-|foomatic-filters-|isl-|iw-|liboauth-|libcdio-|libgphoto2-|libproxy-|libpwquality-|libunique-|mariadb-|netctl-|nmap-|pa_stable_|pycairo-|PySolFC-|pysol-sound-server-|ragel-|speech-dispatcher-|squid-|v4l-utils-|wavpack-|x264-)
      case $srcname in
+        apache-ant-)
+            pkgvers=${srcname}1.9.2-src.tar.bz2
+            pkgURL=http://archive.apache.org/dist/ant/source/
+        ;;
         avr-libc-)
             pkgvers=${srcname}1.8.0.tar.bz2
             pkgURL=http://download.savannah.gnu.org/releases/avr-libc/
@@ -4872,8 +5311,12 @@ EOF
             pkgvers=${srcname}0.18.0.tar.gz
             pkgURL=http://www.bastoul.net/cloog/pages/download/
         ;;
+        dialog)
+            pkgvers=${srcname}.tar.gz
+            pkgURL=ftp://invisible-island.net/dialog/
+        ;;
         docutils-)
-            wgetopts="--no-check-certificate"
+            wgetopts="${wgetopts} --no-check-certificate"
             pkgvers=${srcname}0.10.tar.gz
             pkgURL=https://pypi.python.org/packages/source/d/docutils/
         ;;
@@ -4901,17 +5344,17 @@ EOF
             pkgvers=${srcname}4.0-current.tar.gz
             pkgURL=http://www.openprinting.org/download/foomatic/
         ;;
-        gnome-common-)
-            pkgvers=${srcname}3.6.0.tar.xz
-            pkgURL=http://ftp.acc.umu.se/pub/gnome/sources/gnome-common/3.6/
-        ;;
         isl-)
-            pkgvers=${srcname}0.11.2.tar.bz2
-            pkgURL=http://garage.kotnet.org/~skimo/isl/
+            pkgvers=${srcname}0.12.1.tar.bz2
+            pkgURL=ftp://ftp.linux.student.kuleuven.be/pub/people/skimo/isl/
         ;;
         iw-)
             pkgvers=${srcname}3.8.tar.xz
             pkgURL=http://www.mirrorservice.org/sites/ftp.kernel.org/pub/software/network/iw/
+        ;;
+        liboauth-)
+            pkgvers=${srcname}1.0.1.tar.gz
+            pkgURL=http://sourceforge.net/projects/liboauth/files/
         ;;
         libcdio-)
             pkgvers=${srcname}0.90.tar.gz
@@ -4925,9 +5368,22 @@ EOF
             pkgvers=${srcname}0.4.11.tar.gz 
             pkgURL=http://libproxy.googlecode.com/files/
         ;;
-        libwebp-)
-            pkgvers=${srcname}0.3.0.tar.gz
-            pkgURL=https://webp.googlecode.com/files/
+        libpwquality-)
+            wgetopts="${wgetopts} --no-check-certificate"
+            pkgvers=${srcname}1.2.2.tar.bz2
+            pkgURL=https://fedorahosted.org/releases/l/i/libpwquality/
+        ;;
+        libunique-)
+            pkgvers=${srcname}3.0.2.tar.xz
+            pkgURL=http://ftp.acc.umu.se/pub/gnome/sources/libunique/3.0/
+        ;;
+        mariadb-)
+            pkgvers=${srcname}5.5.32.tar.gz
+            pkgURL=http://mirror.jmu.edu/pub/mariadb/mariadb-5.5.32/kvm-tarbake-jaunty-x86/
+        ;;
+        netctl-)
+            pkgvers=${srcname}1.3.tar.xz
+            pkgURL=ftp://ftp.archlinux.org/other/packages/netctl/
         ;;
         nmap-)
             pkgvers=${srcname}6.25.tar.bz2
@@ -4941,9 +5397,13 @@ EOF
             pkgvers=${srcname}1.10.0.tar.bz2
             pkgURL=http://cairographics.org/releases/
         ;;
-        pyxdg-)
-            pkgvers=${srcname}0.25.tar.gz
-            pkgURL=http://people.freedesktop.org/~takluyver/
+        PySolFC-)
+            pkgvers=${srcname}2.0.tar.bz2
+            pkgURL=http://downloads.sourceforge.net/pysolfc/
+        ;;
+        pysol-sound-server-)
+            pkgvers=${srcname}3.01.tar.bz2
+            pkgURL=http://www.pysol.org/download/pysol/
         ;;
         ragel-)
             pkgvers=${srcname}6.8.tar.gz
@@ -4954,11 +5414,11 @@ EOF
             pkgURL=http://devel.freebsoft.org/pub/projects/speechd/
         ;;
         squid-)
-            pkgvers=${srcname}3.3.3.tar.xz
+            pkgvers=${srcname}3.3.8.tar.xz
             pkgURL=http://www2.us.squid-cache.org/Versions/v3/3.3/
         ;;
         v4l-utils-)
-            pkgvers=${srcname}0.9.3.tar.bz2
+            pkgvers=${srcname}0.9.5.tar.bz2
             pkgURL=http://linuxtv.org/downloads/v4l-utils/
         ;;
         wavpack-)
@@ -4969,19 +5429,16 @@ EOF
             pkgvers=last_stable_x264.tar.bz2
             pkgURL=ftp://ftp.videolan.org/pub/x264/snapshots/
         ;;
-        yelp-tools-)
-            pkgvers=${srcname}3.6.1.tar.xz
-            pkgURL=http://ftp.acc.umu.se/pub/gnome/sources/yelp-tools/3.6/
-        ;;
      esac
      wgetwrite $pkgvers $pkgURL
    ;;
    ghostscript-) # get the fonts too
+echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
 extraFont=gnu-gs-fonts-other-6.0.tar.gz
 if [ ! -e $extraFont ]; then
-wget http://downloads.sourceforge.net/gs-fonts/${extraFont}
+wget $wgetopts http://downloads.sourceforge.net/gs-fonts/${extraFont}
 fi
 count=0
 for fl in *font*
@@ -4993,53 +5450,54 @@ cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    gimp-) # make sure the help file is present. If not download it
+echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.tar.*z* .
 if [ ! -e ${SrcName}help* ]; then # download it
   helpfile=gimp-help-2.8.0.tar.bz2
-  wget ftp://gimp.org/pub/gimp/help/${helpfile}
+  wget $wgetopts ftp://gimp.org/pub/gimp/help/${helpfile}
 fi
 cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   git-|dbus-|docbook-xsl-|freetype-|polkit-|poppler-) # not polkit-gnome, dbus-glib, freetype-doc, git man-pages and htmldocs
+   colord-|git-|dbus-|docbook-xsl-|freetype-|polkit-|poppler-) # colord-gtk, polkit-gnome, freetype-doc, git man-pages and htmldocs
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.tar.*z* .
 cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   glib-|glibmm-|glib-networking-|gobject-introspection-|clutter-|json-glib-|libsoup-|pygobject-3|vala-) # use the latest version from gnome
+   glib-|glib-networking-|gobject-introspection-|clutter-|libsoup-|pygobject-3|rest-|yelp-tools-) # use the latest version from gnome
      case $srcname in
        glib-)
-          pkgvers=${srcname}2.36.1.tar.xz
-          gnmvers=""
-          revsrcnm=""
-          gnmPkgVers $srcname $pkgvers tar
-          pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
-       ;;
-       glibmm-)
-          pkgvers=${srcname}2.36.0.tar.xz
+          pkgvers=${srcname}2.37.5.tar.xz
           gnmvers=""
           revsrcnm=""
           gnmPkgVers $srcname $pkgvers tar
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
        glib-networking-)
-          pkgvers=${srcname}2.36.1.tar.xz
+          pkgvers=${srcname}2.37.5.tar.xz
+          gnmvers=""
+          revsrcnm=""
+          gnmPkgVers $srcname $pkgvers tar
+          pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
+       ;;
+       glibmm-)
+          pkgvers=${srcname}2.37.5.tar.xz
           gnmvers=""
           revsrcnm=""
           gnmPkgVers $srcname $pkgvers tar
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
        gobject-introspection-)
-          pkgvers=${srcname}1.36.0.tar.xz
+          pkgvers=${srcname}1.37.4.tar.xz
           gnmvers=""
           revsrcnm=""
           gnmPkgVers $srcname $pkgvers tar
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
        clutter-)
-          pkgvers=${srcname}1.14.2.tar.xz
+          pkgvers=${srcname}1.15.2.tar.xz
           gnmvers=""
           revsrcnm=""
           gnmPkgVers $srcname $pkgvers tar
@@ -5053,31 +5511,46 @@ EOF
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
        libsoup-)
-          pkgvers=${srcname}2.42.1.tar.xz
+          pkgvers=${srcname}2.43.5.tar.xz
           gnmvers=""
           revsrcnm=""
           gnmPkgVers $srcname $pkgvers tar
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
        pygobject-3)
-          pkgvers=${srcname}.8.1.tar.xz
+          pkgvers=${srcname}.9.5.tar.xz
           gnmvers=""
           revsrcnm=""
           revisednm=${srcname%?} # remove the 3
           gnmPkgVers $revisednm $pkgvers tar
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
-       vala-)
-          pkgvers=${srcname}0.20.1.tar.xz
+       rest-)
+          pkgvers=${srcname}0.7.90.tar.xz
           gnmvers=""
           revsrcnm=""
           gnmPkgVers $srcname $pkgvers tar
           pkgURL=ftp://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
        ;;
+       yelp-tools-)
+          pkgvers=${srcname}3.9.90.tar.xz
+          gnmvers=""
+          revsrcnm=""
+          gnmPkgVers $srcname $pkgvers tar
+          pkgURL=http://ftp.gnome.org/pub/gnome/sources/${revsrcnm}/${gnmvers}/
+        ;;
      esac
      wgetwrite $pkgvers $pkgURL
    ;;
+   gnome-menus-|gnome-panel-|gnome-screensaver-|gnome-shell-) # need a patch
+    cat << "EOF"
+cp ${blfsfiles}/patches/gnomedesktop/${SrcName}*.patch .
+cp ${sourcedir}/${SrcName}*.* .
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+   ;;
    hamcrest-)
+echo "wgetopts=\"$wgetopts\"" >> $Output
            cat << "EOF"
 pkgver=1.3
 corejar=${SrcName}core-${pkgver}.jar
@@ -5085,21 +5558,74 @@ libraryjar=${SrcName}library-${pkgver}.jar
 generatorjar=${SrcName}generator-${pkgver}.jar
 integrationjar=${SrcName}integration-${pkgver}.jar
 pkgURL=https://hamcrest.googlecode.com/files/
+wgetopts="${wgetopts} --no-check-certificate"
 if [ ! -e $corejar ]; then
-  wget ${pkgURL}${corejar}
+  wget $wgetopts ${pkgURL}${corejar}
 fi
 if [ ! -e $libraryjar ]; then
-  wget ${pkgURL}${libraryjar}
+  wget $wgetopts ${pkgURL}${libraryjar}
 fi
 if [ ! -e $generatorjar ]; then
-  wget ${pkgURL}${generatorjar}
+  wget $wgetopts ${pkgURL}${generatorjar}
 fi
 if [ ! -e $integrationjar ]; then
-  wget ${pkgURL}${integrationjar}
+  wget $wgetopts ${pkgURL}${integrationjar}
 fi
 EOF
    ;;
-   jasper-|junit|docbook-xml-) # src is a zip file
+   icedtea-) # download icedtea and all the additional files
+echo "wgetopts=\"$wgetopts\"" >> $Output
+    cat << "EOF"
+_icedtea_ver=2.4.1
+cp ${sourcedir}/${SrcName}${_icedtea_ver}*.patch .
+if [ ! -e rhino1_7R4.zip ]; then
+  if [ -e ${sourcedir}/rhino1_7R4.zip ]; then
+    cp ${sourcedir}/rhino1_7R4.zip .
+  fi
+fi
+_CORBA_CHANGESET=23ae4e0e0cce
+_JAXP_CHANGESET=5be6b670d08b
+_JAXWS_CHANGESET=c0e48fdfb695
+_JDK_CHANGESET=65d95818d79e
+_LANGTOOLS_CHANGESET=91c95fd8eea8
+_OPENJDK_CHANGESET=ae86c6974e8e
+_HOTSPOT_CHANGESET=5f53e7717116
+if [ ! -e icedtea-${_icedtea_ver}.tar.gz ]; then
+  wget $wgetopts http://icedtea.classpath.org/download/source/icedtea-${_icedtea_ver}.tar.gz
+fi
+_url=http://icedtea.classpath.org/hg/release/icedtea7-forest-${_icedtea_ver:0:3}
+wgetopts="${wgetopts} --output-document"
+if [ ! -e openjdk.tar.gz ]; then
+  wget $wgetopts openjdk.tar.gz ${_url}/archive/${_OPENJDK_CHANGESET}.tar.gz
+fi
+if [ ! -e corba.tar.gz ]; then
+  wget $wgetopts corba.tar.gz ${_url}/corba/archive/${_CORBA_CHANGESET}.tar.gz
+fi
+if [ ! -e jaxp.tar.gz ]; then
+  wget $wgetopts jaxp.tar.gz ${_url}/jaxp/archive/${_JAXP_CHANGESET}.tar.gz
+fi
+if [ ! -e jaxws.tar.gz ]; then
+  wget $wgetopts jaxws.tar.gz ${_url}/jaxws/archive/${_JAXWS_CHANGESET}.tar.gz
+fi
+if [ ! -e jdk.tar.gz ]; then
+  wget $wgetopts jdk.tar.gz ${_url}/jdk/archive/${_JDK_CHANGESET}.tar.gz
+fi
+if [ ! -e langtools.tar.gz ]; then
+  wget $wgetopts langtools.tar.gz ${_url}/langtools/archive/${_LANGTOOLS_CHANGESET}.tar.gz
+fi
+if [ ! -e hotspot.tar.gz ]; then
+  wget $wgetopts hotspot.tar.gz ${_url}/hotspot/archive/${_HOTSPOT_CHANGESET}.tar.gz
+fi
+EOF
+echo "wgetopts=\"-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy\"" >> $Output
+    cat << "EOF"
+if [ ! -e rhino1_7R4.zip ]; then
+  wget $wgetopts https://github.com/downloads/mozilla/rhino/rhino1_7R4.zip
+fi
+cd $(tar vxf ${SrcName}${_icedtea_ver}.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   jasper-|docbook-xml-) # src is a zip file
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
 EOF
@@ -5121,6 +5647,20 @@ cd ${SrcName}*
 EOF
        ;;
     esac
+   ;;
+   jdk-)
+    cat << "EOF"
+cp ${sourcedir}/${SrcName}*.* .
+cd $(tar vxf ${SrcName}*-linux-x64.tar.gz | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   junit) # git the source, so srcname is junit not junit-
+    cat << "EOF"
+if [ ! -d junit ]; then
+  git clone https://github.com/junit-team/junit.git
+fi
+cd junit
+EOF
    ;;
    krb5-) # untars to a tar.gz and a tar.gz.asc
     cat << "EOF"
@@ -5145,24 +5685,23 @@ cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}?.?.?.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   llvm-)
-    cat << "EOF"
-clangSrc=clang-3.2.src.tar.gz
-compilerrt=compiler-rt-3.2.src.tar.gz
-releasevers=3.2
-if [ ! -e $clangSrc ]; then
-  wget http://llvm.org/releases/${releasevers}/${clangSrc}
-fi
-if [ ! -e $compilerrt ]; then
-  wget http://llvm.org/releases/${releasevers}/${compilerrt}
-fi
-if [ ! -e R600-Mesa-9.1.patch ]; then
-  wget http://people.freedesktop.org/~tstellar/llvm/3.2/R600-Mesa-9.1.patch
-fi
-cp ${sourcedir}/${SrcName}*.* .
-cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
-EOF
-   ;;
+# add this if you want the clang compiler
+#   llvm-)
+#echo "wgetopts=\"$wgetopts\"" >> $Output
+#    cat << "EOF"
+#clangSrc=cfe-3.3.src.tar.gz
+#compilerrt=compiler-rt-3.3.src.tar.gz
+#releasevers=3.3
+#if [ ! -e $clangSrc ]; then
+#  wget $wgetopts http://llvm.org/releases/${releasevers}/${clangSrc}
+#fi
+#if [ ! -e $compilerrt ]; then
+#  wget $wgetopts http://llvm.org/releases/${releasevers}/${compilerrt}
+#fi
+#cp ${sourcedir}/${SrcName}*.* .
+#cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
+#EOF
+#   ;;
    LVM2.|sg3_utils-|zip|icu4c-|cdparanoia-|xterm-|sgml-common-|openldap-) # a .tgz src file
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
@@ -5170,26 +5709,17 @@ cd $(tar vxf ${SrcName}*.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    MesaLib-) # download the glu src and extract to Mesa-xxx not MesaLib
+echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
 glusrc="glu-9.0.0.tar.bz2"
 gludir="glu-9.0.0"
 if [ ! -e $glusrc ]; then
-wget ftp://ftp.freedesktop.org/pub/mesa/glu/${glusrc}
+wget $wgetopts ftp://ftp.freedesktop.org/pub/mesa/glu/${glusrc}
 fi
 tar xf $glusrc
 cp ${sourcedir}/${SrcName}*.* .
 tar xf ${SrcName}*.tar.*z*
 cd Mesa-*
-EOF
-   ;;
-   mysql-) # wget the docs (single html)
-    cat << "EOF"
-cp ${sourcedir}/${SrcName}*.* .
-mysqlManual=refman-5.5-en.html.tar.gz
-if [ ! -e $mysqlManual ]; then
-wget -O $mysqlManual http://downloads.mysql.com/docs/${mysqlManual}
-fi
-cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    nasm-) # delete the docs file
@@ -5199,28 +5729,30 @@ rm ${SrcName}*doc.tar.xz
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
-   OpenJDK-) # delete the binary files
+   nss-) # copy the patch from patches/security
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
-rm -rf ${SrcName}*-bin*
+cp ${blfsfiles}/patches/security/nss*.patch .
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    php-) # wget the docs (single html)
+echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
 phpManual=php_manual_en.html.gz
 if [ ! -e $phpManual ]; then
-wget -O $phpManual http://us.php.net/get/${phpManual}/from/this/mirror
+wget $wgetopts -O $phpManual http://us.php.net/get/${phpManual}/from/this/mirror
 fi
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    Python-3) # get the docs as well
+echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
 pythondocs="python-${Python3vers}-docs-html.tar.bz2"
 if [ ! -e $pythondocs ]; then
-wget  http://docs.python.org/ftp/python/doc/${Python3vers}/${pythondocs}
+wget $wgetopts http://docs.python.org/ftp/python/doc/${Python3vers}/${pythondocs}
 fi
 cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
@@ -5239,11 +5771,33 @@ cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}*-src.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
+   telepathy-glib-|telepathy-logger-|telepathy-farstream-|telepathy-mission-control-)
+     case $srcname in
+        telepathy-glib-)
+            pkgvers=${srcname}0.21.1.tar.gz
+            pkgURL=http://telepathy.freedesktop.org/releases/telepathy-glib/
+        ;;
+        telepathy-logger-)
+            pkgvers=${srcname}0.8.0.tar.bz2
+            pkgURL=http://telepathy.freedesktop.org/releases/telepathy-logger/
+        ;;
+        telepathy-farstream-)
+            pkgvers=${srcname}0.6.0.tar.gz
+            pkgURL=http://telepathy.freedesktop.org/releases/telepathy-farstream/
+        ;;
+        telepathy-mission-control-)
+            pkgvers=${srcname}5.15.0.tar.gz
+            pkgURL=http://telepathy.freedesktop.org/releases/telepathy-mission-control/
+        ;;
+     esac
+     wgetwrite $pkgvers $pkgURL
+   ;;
    Tie-IxHash-)
+echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
 tieixhashSrc=${SrcName}1.22.tar.gz
 if [ ! -e $tieixhashSrc ]; then
-wget http://search.cpan.org/CPAN/authors/id/C/CH/CHORNY/${tieixhashSrc}
+wget $wgetopts http://search.cpan.org/CPAN/authors/id/C/CH/CHORNY/${tieixhashSrc}
 fi
 cd $(tar vxf $tieixhashSrc | awk -F\/ 'END{print $1}')
 EOF
@@ -5304,6 +5858,14 @@ case $pkgname in
         >> $Output
      fi
     ;;
+    aisleriot)
+       GetInternalCommands basicComms \
+        | sed -e 's/disable-static/disable-static \\\n\              --with-card-theme-formats=svg/' \
+        >> $Output
+    ;;
+    alacarte)
+       GetInternalCommands basicComms >> $Output
+    ;;
     alsa-lib)
        GetCommands \
         | sed -e '/make doc/,/install -m644 src\/.libs\/libasound.a/d' \
@@ -5311,20 +5873,21 @@ case $pkgname in
         >> $Output
     ;;
     alsa-utils)
-       if [ "$SYSTEMD" = yes ]; then
-         GetCommands \
-          | sed -e 's/ --without-systemdsystemunitdir//' \
-                -e '/make install-alsa/d' \
-                -e '/touch \/var\/lib\/alsa\/asound.state/,/usermod/d' \
-                -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       else
-         GetCommands \
-          | sed -e '/make install-alsa/d' \
-                -e '/touch \/var\/lib\/alsa\/asound.state/,/usermod/d' \
-                -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       fi
+         if [ "$SYSTEMD" = yes ]; then
+           GetCommands \
+            | sed -e 's#\./configure#\./configure --with-udev-rules-dir=/usr/lib/udev/rules.d \\\n\   --with-systemdsystemunitdir=/usr/lib/systemd/system#' \
+                  -e '/make install-alsa/d' \
+                  -e '/make install/a\  cd alsactl\n\  make 90-alsa-restore.rules\n\  install -D -m644 90-alsa-restore.rules \/usr\/lib\/udev\/rules.d' \
+                  -e '/touch/,/usermod/d' \
+                  -e 's/\(.*\)&&$/\1/' \
+            >> $Output
+         else
+           GetCommands \
+            | sed -e '/make install-alsa/d' \
+                  -e '/touch/,/usermod/d' \
+                  -e 's/\(.*\)&&$/\1/' \
+            >> $Output
+         fi
     ;;
     apache)
        if ! $as_root; then
@@ -5342,7 +5905,8 @@ case $pkgname in
     ;;
     apache-ant)
        GetCommands \
-        | sed -e '/sed -i/d' \
+        | sed -e '/cp -v/d' \
+              -e 's/1.8.4/1.9.1/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -5373,7 +5937,7 @@ case $pkgname in
             | sed -e '/groupadd/,/groupadd/d' \
                   -e '/--disable-qt4        \\/d' \
                   -e 's/--with-distro=none /--with-distro=none  \\/' \
-                  -e '/--with-distro=none/a\      --with-autoipd-user=avahi \\\n\      --with-autoipd-group=avahi \\\n\      --with-systemdsystemunitdir=/lib/systemd/system' \
+                  -e '/--with-distro=none/a\      --with-autoipd-user=avahi \\\n\      --with-autoipd-group=avahi \\\n\      --with-systemdsystemunitdir=/usr/lib/systemd/system' \
                   -e '/make install-avahi/d' \
                   -e 's/\(.*\)&&$/\1/' \
             >> $Output
@@ -5401,8 +5965,11 @@ case $pkgname in
     ;;
     avr-libc)
       GetInternalCommands basicComms \
-        | sed -e 's/\.\/configure --prefix=\/usr/\.\/configure --prefix=\/usr --host=avr/' \
+        | sed -e 's/disable-static/disable-static --host=avr/' \
         >> $Output
+    ;;
+    baobab)
+       GetInternalCommands basicComms >> $Output
     ;;
     bind)
        if ! $as_root; then
@@ -5432,7 +5999,7 @@ case $pkgname in
     bluez)
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e 's/--without-systemdunitdir/--with-systemdunitdir=\/lib\/systemd\/system/' \
+          | sed -e 's/--without-systemdunitdir/--with-systemdunitdir=\/usr\/lib\/systemd\/system/' \
                 -e '/make install-bluetooth/d' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
@@ -5443,9 +6010,20 @@ case $pkgname in
           >> $Output
        fi
     ;;
+    boost)
+       GetInternalCommands boostComms >> $Output
+    ;;   
     cacerts)
         GetcacertsCommands \
-        | sed -e 's/\(.*\)&&$/\1/' \
+        | sed -e '/wget --output-document/i wgetopts='"$wgetopts"'' \
+              -e 's/wget --output-document/wget \$wgetopts -O/' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    caribou)
+       GetInternalCommands basicComms \
+        | sed -e 's/libexecdir=\/usr\/lib/libexecdir=\/usr\/lib\/caribou/' \
+              -e "/make_commands()$/N;/make_commands()\n{ :/a\  sed -i -e 's\/ -shared \/ -Wl,-O1,--as-needed\\\\0/g' libtool" \
         >> $Output
     ;;
     cloog)
@@ -5457,7 +6035,7 @@ case $pkgname in
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
           | sed -e '/groupadd/,/-g colord -s \/bin\/false colord/d' \
-                -e 's/--disable-systemd-login/--with-systemdsystemunitdir=\/lib\/systemd\/system/' \
+                -e 's/--disable-systemd-login/--with-systemdsystemunitdir=\/usr\/lib\/systemd\/system/' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
@@ -5467,12 +6045,20 @@ case $pkgname in
           >> $Output
        fi
     ;;
+    colord-gtk)
+       GetInternalCommands basicComms \
+        | sed -e 's/--prefix=\/usr/--prefix=\/usr \\\n\              --enable-vala/' \
+        >> $Output
+    ;;
     coreutils)
         GetInternalCommands coreutilsComms >> $Output
     ;;
     cracklib)
        GetCommands \
-        | sed -e '/create-cracklib-dict/,/\/usr\/share\/dict\/cracklib-extra-words/d' \
+        | sed -e 's/--prefix=\/usr/--prefix=\/usr --sbindir=\/usr\/bin/' \
+              -e 's/--with-default-dict=\/lib/--with-default-dict=\/usr\/lib/' \
+              -e '/mv -v/,/ln -v -sf ..\/..\/lib/d' \
+              -e '/create-cracklib-dict/,/\/usr\/share\/dict\/cracklib-extra-words/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -5483,7 +6069,7 @@ case $pkgname in
             | sed -e '/useradd/,/usermod/d' \
                   -e '/sed -i/d' \
                   -e '/patch -Np1 -i/i patch -Np1 -i ../cups-systemd-socket.patch' \
-                  -e 's/--with-system-groups=lpadmin/--with-system-groups=lpadmin \\\n  --with-systemdsystemunitdir=\/lib\/systemd\/system/' \
+                  -e 's/--with-system-groups=lpadmin/--with-system-groups=lpadmin \\\n  --with-systemdsystemunitdir=\/usr\/lib\/systemd\/system/' \
                   -e '/make install-cups/d' \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BUILDROOT)\\\\\$(DBUSDIR)\\\/system.d; \\\\\\\/d' desktop\/Makefile" \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LOCALEDIR)/d' locale\/Makefile" \
@@ -5556,7 +6142,8 @@ case $pkgname in
     ;;
     cyrus-sasl)
        GetCommands \
-        | sed -e '/make install-saslauthd/d' \
+        | sed -e 's/\.\/configure/CFLAGS+="-fPIC" \.\/configure/' \
+              -e '/make install-saslauthd/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -5607,7 +6194,7 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
-    dotconf|ffmpegthumnaler|gnome-common|isl|libcdio|libgphoto2|libwebp|nmap|portaudio|pygtk|pyatspi|ragel|yelp-tools)
+    dialog|dotconf|ffmpegthumnaler|gnome-common|isl|libcdio|libgphoto2|nmap|portaudio|pygtk|pyatspi|ragel|yelp-tools)
        GetInternalCommands  basicComms >> $Output
     ;;
     dsktp-file-utls)
@@ -5626,15 +6213,13 @@ case $pkgname in
        GetInternalCommands espeakComms >> $Output
     ;;
     evol-data-server)
-       GetCommands \
-        | sed -e 's/--enable-vala-bindings/--enable-vala-bindings --disable-uoa/' \
-              -e 's/\(.*\)&&$/\1/' \
+       GetInternalCommands basicComms \
+        | sed -e 's/--libexecdir=\/usr\/lib/--libexecdir=\/usr\/lib\/evolution-data-server \\\n\              --enable-vala-bindings --disable-uoa/' \
         >> $Output
     ;;
     evolution)
-       GetCommands \
-        | sed -e 's/import/import \\\n--disable-bogofilter \\\n--disable-spamassassin \\\n--disable-text-highlight/' \
-              -e 's/\(.*\)&&$/\1/' \
+       GetInternalCommands basicComms \
+        | sed -e 's/disable-static/disable-static \\\n\              --disable-bogofilter \\\n\              --disable-spamassassin \\\n\              --disable-text-highlight \\\n\              --disable-pst-import/' \
         >> $Output
     ;;
     faac)
@@ -5667,9 +6252,26 @@ case $pkgname in
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    folks)
+       GetInternalCommands basicComms \
+        | sed -e 's/disable-static/disable-static \\\n\              --enable-vala/' \
+        >> $Output
+    ;;
     foomatic)
        GetInternalCommands basicComms \
-        | sed -e 's/prefix=\/usr/prefix=\/usr \\\n\   --sysconfdir=\/etc \\\n\    --enable-dbus/' \
+        | sed -e 's/disable-static/disable-static \\\n\    --enable-dbus/' \
+        >> $Output
+    ;;
+    fontconfig)
+        GetCommands \
+        | sed -e '/install -v -dm755/,/\/usr\/share\/{man\/man/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    freeglut)
+       GetCommands \
+        | sed -e '/configure_commands()/ised -i "s\/smooth_opengl3 \/\/" progs\/demos\/Makefile.\*\nautoreconf -vfi' \
+              -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     freetype)
@@ -5685,35 +6287,10 @@ case $pkgname in
         >> $Output
     ;;
     gdm)
-       if ! $as_root; then
-         if [ "$SYSTEMD" = yes ]; then
-           GetCommands \
-            | sed -e '/groupadd/,/usermod -a -G video/d' \
-                  -e 's/--with-consolekit-directory=\/usr\/lib\/ConsoleKit \\/--without-console-kit \\\n\              --with-systemd \\/' \
-                  -e '/make install-gdm/,/\/etc\/inittab/d' \
-                  -e 's/\(.*\)&&$/\1/' \
-            >> $Output
-         else
-           GetCommands \
-            | sed -e '/groupadd/,/usermod -a -G video/d' \
-                  -e '/make install-gdm/,/\/etc\/inittab/d' \
-                  -e 's/\(.*\)&&$/\1/' \
-            >> $Output
-         fi
-       else
-         if [ "$SYSTEMD" = yes ]; then
-           GetCommands \
-            | sed -e 's/--with-consolekit-directory=\/usr\/lib\/ConsoleKit \\/--without-console-kit \\\n\              --with-systemd \\/' \
-                  -e '/make install-gdm/d' \
-                  -e 's/\(.*\)&&$/\1/' \
-            >> $Output
-         else
-           GetCommands \
-            | sed -e '/make install-gdm/d' \
-                  -e 's/\(.*\)&&$/\1/' \
-            >> $Output
-         fi
-       fi
+       GetInternalCommands basicComms \
+        | sed -e 's/libexecdir=\/usr\/lib/libexecdir=\/usr\/lib\/gdm/' \
+              -e 's/disable-static/disable-static \\\n\              --with-at-spi-registryd-directory=\/usr\/lib\/at-spi2-core \\\n\              --with-check-accelerated-directory=\/usr\/lib\/gnome-session \\\n\              --with-authentication-agent-directory=\/usr\/lib\/polkit-gnome \\\n\              --with-systemd/' \
+        >> $Output
     ;;
     ghostscript)
        GetCommands \
@@ -5728,8 +6305,6 @@ case $pkgname in
     gimp)
        GetCommands \
         | sed -e 's/ --without-gvfs//' \
-              -e '/ALL_LINGUAS/,/update-desktop-database/d' \
-              -e 's[\*\*EDITME<browser>EDITME\*\*['$BROWSER'[' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -5746,7 +6321,7 @@ case $pkgname in
           | awk '{if ($1 == "make" && $2 =="install")
 print "  "$1" "$2"\n  cd po/build\n  for code in locale/*\n  do\n   if [ ! -d /usr/share/${code}/LC_MESSAGES ]; then\n     install -v -d /usr/share/${code}/LC_MESSAGES\n   fi\n   cp ${code}/LC_MESSAGES/git.mo /usr/share/${code}/LC_MESSAGES/\n  done\n  cd ../..";
 else
-print $0
+print $0;
 }' \
         >> $Output
        else
@@ -5770,17 +6345,32 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    gnome-bckgrnds)
+       GetInternalCommands basicComms  >> $Output
+    ;;
     gnome-bluetooth)
-       GetCommands \
-        | sed -e "/make install/i\  sed -i '/\\\\\$(UPDATE_DESKTOP_DATABASE)/d' Makefile" \
-              -e 's/\(.*\)&&$/\1/' \
+       GetInternalCommands basicComms \
+        | sed -e 's/disable-static/disable-static \\\n\              --disable-desktop-update \\\n\              --disable-icon-update/' \
+              -e "/make_commands()$/N;/make_commands()\n{ :/a\  sed -i -e 's\/ -shared \/ -Wl,-O1,--as-needed\\\\0/g' libtool" \
         >> $Output
     ;;
+    gnome-calculator)
+       GetInternalCommands basicComms >> $Output
+    ;;
     gnome-cntrl-cntr)
-       GetCommands \
-        | sed -e 's/--sysconfdir=\/etc/--sysconfdir=\/etc --localstatedir=\/var --libexecdir=\/usr\/lib\/gnome-control-center/' \
-              -e 's/\(.*\)&&$/\1/' \
+       GetInternalCommands basicComms\
+        | sed -e 's/libexecdir=\/usr\/lib/libexecdir=\/usr\/lib\/gnome-control-center/' \
+              -e "/make_commands()$/N;/make_commands()\n{ :/a\  sed -i -e 's\/ -shared \/ -Wl,-O1,--as-needed\\\\0/g' libtool" \
         >> $Output
+    ;;
+    gnome-dictionary)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    gnome-disk-util)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    gnome-doc-utils)
+       GetInternalCommands basicComms >> $Output
     ;;
     gnome-games)
        if ! $as_root; then
@@ -5794,21 +6384,72 @@ print $0
           >> $Output
        fi 
     ;;
-    gnome-panel)
-       GetCommands \
-        | sed -e "/configure_commands()/i sed -i '/gweather-xml.h/d' applets\/clock\/clock.c" \
-              -e 's/\(.*\)&&$/\1/' \
+    gnome-js-common)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    gnome-menus)
+       GetInternalCommands basicComms \
+        | sed -e '/configure_commands()/i patch -Np1 -i ../gnome-menus-3.8.0-calculator-1.patch' \
         >> $Output
+    ;;
+    gnome-panel)
+       GetInternalCommands basicComms \
+        | sed -e '/configure_commands()/i patch -Np1 -i ..\/gnome-panel-3.6.2-gnome-desktop-3.8.patch\npatch -Np0 -i ..\/gnome-panel-3.6.2-drop-gweather-xml-include.patch\npatch -Np1 -i ..\/gnome-panel-3.6.2-18_fix_force_quit_applet.patch\npatch -Np1 -i ..\/gnome-panel-3.6.2-fix-autoconf.patch' \
+              -e '/configure_commands()/i autoreconf -fi' \
+              -e 's/libexecdir=\/usr\/lib/libexecdir=\/usr\/lib\/gnome-panel/' \
+        >> $Output
+    ;;
+    gnm-scrnsaver)
+       GetInternalCommands basicComms \
+        | sed -e '/configure_commands()/i patch -Np1 -i ../gnome-screensaver-3.6.1-move-desktop-file-1.patch' \
+              -e "/configure_commands()/i sed -i 's\/AM_CONFIG_HEADER\/AC_CONFIG_HEADERS\/' configure.ac" \
+              -e '/configure_commands()/i autoreconf -fi' \
+              -e 's/libexecdir=\/usr\/lib/libexecdir=\/usr\/lib\/gnome-screen-saver/' \
+        >> $Output
+    ;;
+    gnome-serch-tool)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    gnome-session)
+       GetInternalCommands basicComms \
+        | sed -e 's/libexecdir=\/usr\/lib/libexecdir=\/usr\/lib\/gnome-session/' \
+              -e 's/disable-static/disable-static --enable-systemd/' \
+        >> $Output
+    ;;
+    gnome-set-daemon)
+       GetInternalCommands basicComms \
+        | sed -e 's@libexecdir=/usr/lib@libexecdir=/usr/lib/gnome-settings-daemon@' \
+              -e "/make_commands()$/N;/make_commands()\n{ :/a\  sed -i -e 's\/ -shared \/ -Wl,-O1,--as-needed\\\\0/g' libtool" \
+        >> $Output
+    ;;
+    gnome-shell)
+       GetInternalCommands basicComms \
+        | sed -e '/configure_commands()/i patch -Np1 -i ../gnome-shell-3.8.4-nm-libexecdir.patch' \
+              -e 's@libexecdir=/usr/lib@libexecdir=/usr/lib/gnome-shell@' \
+              -e "/make_commands()$/N;/make_commands()\n{ :/a\  sed -i -e 's\/ -shared \/ -Wl,-O1,--as-needed\\\\0/g' libtool" \
+        >> $Output
+    ;;
+    gnome-system-log)
+       GetInternalCommands basicComms >> $Output
     ;;
     gnome-terminal)
        GetCommands \
-        | sed -e 's/--sysconfdir=\/etc/--sysconfdir=\/etc --localstatedir=\/var \\\n\    --libexecdir=\/usr\/lib\/gnome-terminal/' \
+        | sed -e 's/sysconfdir=\/etc/sysconfdir=\/etc --localstatedir=\/var \\\n\    --libexecdir=\/usr\/lib\/gnome-terminal/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
+    ;;
+    gnome-user-docs)
+       GetInternalCommands basicComms >> $Output
     ;; 
+    gnm-user-share)
+       GetInternalCommands basicComms \
+        | sed -e 's@libexecdir=/usr/lib@libexecdir=/usr/lib/gnome-user-share@' \
+        >> $Output
+    ;;
     gnupg)
        GetCommands \
         | sed -e '/makeinfo --html/,/make -C doc/d' \
+              -e '/install -v -m755 -d \/usr\/share\/doc/i ln -s gpg2 \/usr\/bin\/gpg\n ln -s gpgv2 \/usr\/bin\/gpgv\n rm \/usr\/share\/gnupg\/com-certs.pem' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -5817,6 +6458,11 @@ print $0
         | sed -e '/\/usr\/share\/doc\//d' \
               -e '/cp -v -R/,/make -C doc\/reference/d' \
               -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    goa)
+       GetInternalCommands basicComms \
+        | sed -e 's/--libexecdir=\/usr\/lib/--libexecdir=\/usr\/lib\/gnome-online-accounts/' \
         >> $Output
     ;;
     gperf)
@@ -5848,6 +6494,15 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    gsl)
+       GetCommands \
+        | sed -e '/make html/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    gtkhtml)
+       GetInternalCommands basicComms >> $Output
+    ;;
     gtkplus2)
        GetCommands \
         | sed -e '/gtk-query-immodules-2.0/d' \
@@ -5865,6 +6520,9 @@ print $0
               -e 's/\*\*EDITMEelementaryEDITME\*\*/gnome/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
+    ;;
+    gtk-vnc)
+       GetInternalCommands gtkvncComms >> $Output
     ;;
     guile)
        GetCommands \
@@ -5890,18 +6548,22 @@ print $0
     ;;
     iptables)
        GetCommands \
-        | sed -e '/make install-iptables/d' \
+        | sed -e 's/--with-xtlibdir=\/lib/--with-xtlibdir=\/usr\/lib/' \
+              -e '/ln -sfv ..\/..\/sbin/,/make install-iptables/d' \
               -e "/configure_commands()/ i sed -i -e '\/sbin\\\/ldconfig/d' \\\\\n    -e '/\${INSTALL} -dm0755 \"\${DESTDIR}\${bindir}\";/'d iptables\/Makefile.in" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     iw)
        GetInternalCommands basicComms \
-        | sed -e 's/\.\/configure --prefix=\/usr/echo "no configure script for this package"/' \
+        | sed -e '/configure/,/disable-static/d' \
         >> $Output
     ;;
     java-hamcrest)
        GetInternalCommands hamcrestComms >> $Output
+    ;;
+    jdkbin)
+       GetInternalCommands jdkbinComms >> $Output
     ;;
     json-c)
        GetCommands \
@@ -5910,16 +6572,15 @@ print $0
         >> $Output
     ;;
     junit)
-       GetCommands \
-        | sed -e '/chown -R root:root/d' \
-              -e 's/java/\/opt\/OpenJDK\/bin\/java/' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
+       GetInternalCommands junitComms >> $Output
     ;;
     krb5)
        GetCommands \
         | sed -e '/gpg/d' \
+              -e '/mv -v/d' \
+              -e '/ln -v -sf/d' \
               -e '/cat > \/etc\/krb5.conf/,/make install-krb5/d' \
+              -e '/unset LIBRARY/i install -dm 755 \/var\/lib\/krb5kdc\n install -pm 644 config-files\/kdc.conf \/var\/lib\/krb5kdc\/kdc.conf\n install -pm 644 config-files\/krb5.conf \/etc\/krb5.conf\ninstall -m 644 util\/ac_check_krb5.m4 \/usr\/share\/aclocal' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -5937,7 +6598,7 @@ print $0
           >> $Output
        elif [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e 's/oss/oss \\\n   --with-systemdsystemunitdir=\/lib\/systemd\/system/' \
+          | sed -e 's/oss/oss \\\n   --with-systemdsystemunitdir=\/usr\/lib\/systemd\/system/' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
@@ -5973,16 +6634,25 @@ print $0
         >> $Output
     ;;
     libgdata)
-       if [ "$GNOME_OR_XFCE" = xfce ]; then
-         GetCommands \
-          | sed -e 's/disable-static/disable-static --disable-gnome/' \
-                -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       else
-         GetCommands \
-          | sed -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       fi
+       GetInternalCommands basicComms >> $Output
+    ;;
+    libgee)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    libgnomekbd)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    libgweather)
+       GetInternalCommands basicComms \
+        | sed -e 's/--prefix=\/usr/--prefix=\/usr --enable-locations-compression/' \
+        >> $Output
+    ;;
+    libical)
+       GetCommands \
+        | sed -e '/mkdir build/i if [ ! -d build ]; then' \
+              -e '/cd build/i fi' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
     ;;
     libidl)
        GetCommands \
@@ -6009,19 +6679,13 @@ print $0
         >> $Output
     ;;
     liboauth)
-       GetCommands \
-        | sed -e '/cp -rv doc/d' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
+       GetInternalCommands basicComms  >> $Output
     ;;
     libproxy)
        GetInternalCommands libproxyComms >> $Output
     ;;
     libpwquality)
-       GetCommands \
-        | sed -e '/--disable-python-bindings/d' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
+       GetInternalCommands libpwqualityComms >> $Output
     ;;
     libreoffice)
        GetCommands \
@@ -6033,16 +6697,7 @@ print $0
         >> $Output
     ;;
     librest)
-       if [ "$GNOME_OR_XFCE" = xfce ]; then
-         GetCommands \
-          | sed -e 's/prefix=\/usr/prefix=\/usr --without-gnome/' \
-                -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       else
-         GetCommands \
-          | sed -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       fi
+       GetInternalCommands basicComms >> $Output
     ;;
     libsoup)
        if [ "$GNOME_OR_XFCE" = xfce ]; then
@@ -6068,9 +6723,29 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    libtirpc)
+       GetCommands \
+        | sed -e '/mv -v/,/ln -sfv/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    libunique)
+      GetInternalCommands basicComms \
+       | sed -e 's/--disable-static/--disable-static --disable-dbus/' \
+       >> $Output
+    ;;
     libusb|cpio)
        GetCommands \
         | sed -e '/make -C doc /d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    libwacom)
+      GetInternalCommands basicComms >> $Output
+    ;;
+    libxcb)
+       GetCommands \
+        | sed -e "/make install/i\  sed -i -e 's/libxcb\\\/install-sh/libxcb\\\/libxcb-1.9.1\\\/install-sh/' doc\\\/Makefile" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -6080,56 +6755,56 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    libzeitgeist)
+      GetInternalCommands basicComms >> $Output
+    ;;
     linux-pam)
        GetCommands \
-        | sed -e '/chmod -v 4755 \/sbin\/unix_chkpwd/d' \
+        | sed -e 's/prefix=\/usr/prefix=\/usr --libdir=\/usr\/lib --sbindir=\/usr\/sbin/' \
+              -e '/chmod -v 4755/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
-    llvm)
+    llvm) # don't bother with clang at the moment
        GetCommands \
-        | sed -e '/make -C docs/d' \
-              -e '/ldconfig/,/install/d' \
+        | sed -e '/tar -xf/,/mv projects/d' \
+              -e '/make -C docs/d' \
+              -e '/install -v -m644 docs/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     lvm2)
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e 's/--enable-udev_sync/--enable-udev_sync \\\n --with-systemdsystemunitdir=\/lib\/systemd\/system \\\n --enable-dmeventd \\\n --with-default-locking-dir=\/run\/lock\/lvm \\\n --enable-lvmetad/' \
-                -e 's/\(.*\)&&$/\1/' \
-          >> $Output
-       fi
-    ;;
-    mesalib)
-         GetCommands \
-          | sed -e '/\.\/configure --prefix=\/usr --disable-static/i cd \.\.\/glu*' \
-                -e 's/\(.*\)&&$/\1/' \
-         >> $Output
-    ;;
-    mutter)
-       GetCommands \
-        | sed -e 's/disable-static/disable-static --enable-compile-warnings=no/' \
-              -e 's/\(.*\)&&$/\1/' \
-        >> $Output
-    ;;
-    mysql)
-       if ! $as_root; then
-         GetCommands \
-          | sed -e '/groupadd/,/useradd/d' \
-                -e 's/share\/doc\/mysql/share\/doc\/mysql-'"${mysqlvers}"'/' \
-                -e '/mysql_install_db/,/mysqladmin -p shutdown/d' \
-                -e 's/make install-mysql/install -v -m0755 -d \/usr\/share\/doc\/mysql-'"${mysqlvers}"'\ntar -xvf ..\/..\/refman-5.5-en.html.tar.gz -C \/usr\/share\/doc\/mysql-'"${mysqlvers}"' --no-same-owner/' \
+          | sed -e 's/--enable-udev_sync/--enable-udev_sync \\\n\              --with-udev-prefix=\/usr \\\n\              --with-systemdsystemunitdir=\/usr\/lib\/systemd\/system \\\n\              --with-default-pid-dir=\/run \\\n\              --with-default-dm-run-dir=\/run \\\n\              --with-default-run-dir=\/run\/lvm \\\n\              --enable-dmeventd \\\n\              --enable-lvmetad \\\n\              --enable-udev_rules \\\n\              --with-default-locking-dir=\/run\/lock\/lvm/' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
          GetCommands \
-          | sed -e '/mysql_install_db/,/mysqladmin -p shutdown/d' \
-                -e 's/share\/doc\/mysql/share\/doc\/mysql-'"${mysqlvers}"'/' \
-                -e 's/make install-mysql/install -v -m0755 -d \/usr\/share\/doc\/mysql-'"${mysqlvers}"'\ntar -xvf ..\/..\/refman-5.5-en.html.tar.gz -C \/usr\/share\/doc\/mysql-'"${mysqlvers}"' --no-same-owner/' \
-                -e 's/\(.*\)&&$/\1/' \
+          | sed -e 's/\(.*\)&&$/\1/' \
           >> $Output
        fi
+    ;;
+    mesalib)
+       GetCommands \
+        | sed -e '/\.\/configure --prefix=\$XORG_PREFIX --disable-static/i cd \.\.\/glu*' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    metacity)
+       GetInternalCommands basicComms \
+        | sed -e 's@libexecdir=/usr/lib@libexecdir=/usr/lib/metacity@' \
+        >> $Output
+    ;;
+    mutter)
+       GetInternalCommands basicComms \
+        | sed -e 's@libexecdir=/usr/lib@libexecdir=/usr/lib/mutter@' \
+              -e 's/disable-static/disable-static --enable-compile-warnings=no/' \
+              -e "/make_commands()$/N;/make_commands()\n{ :/a\  sed -i -e 's\/ -shared \/ -Wl,-O1,--as-needed\\\\0/g' libtool" \
+        >> $Output
+    ;;
+    mysql)
+       GetInternalCommands mariadbComms >> $Output
     ;;
     nasm)
        GetCommands \
@@ -6138,10 +6813,25 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    nautilus-sendto)
+       GetInternalCommands basicComms >> $Output
+    ;;
+    neon)
+       GetCommands \
+        | sed -e 's/disable-static/disable-static \\\n\              --with-expat --with-ssl=openssl \\\n\              --with-ca-certificates=\/etc\/ssl\/ca-bundle.crt/' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
+    netctl)
+       GetInternalCommands netctlComms >> $Output
+    ;;
+    ntificatn-demon)
+       GetInternalCommands ntificatndemonComms >> $Output
+    ;;
     networkmanager)
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e 's/--without-systemdsystemunitdir \\/--with-dhcpcd=\/usr\/sbin\/dhcpcd \\\n\      --with-iptables=\/sbin\/iptables \\\n\      --with-systemdsystemunitdir=\/lib\/systemd\/system \\\n\      --with-udev-dir=\/lib\/udev \\\n\      --with-session-tracking=systemd \\\n\      --disable-static \\/' \
+          | sed -e '/--disable-ppp/i\              --with-dhcpcd=\/usr\/sbin\/dhcpcd \\\n\              --with-iptables=\/usr\/sbin\/iptables \\\n\              --with-systemdsystemunitdir=\/usr\/lib\/systemd\/system \\\n\              --with-udev-dir=\/usr\/lib\/udev \\\n\              --with-session-tracking=systemd \\\n\              --disable-static \\' \
                 -e '/make install-networkmanager/d' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
@@ -6154,9 +6844,10 @@ print $0
     ;;
     nss)
        GetCommands \
-        | sed -e '/cd ..\/..\/dist/d' \
-              -e '/install -v -m755 Linux\*\/lib\/\*/ i\  cd ..\/..\/dist' \
-              -e '/cp -v -RL/ i cd ..\/..\/dist' \
+        | sed -e '/patch/i patch -Np1 -i ../nss-3.15.1-add_spi+cacert_ca_certs.patch' \
+              -e '/cd ..\/dist/d' \
+              -e '/install -v -m755 Linux/i\  cd ..\/dist' \
+              -e '/cp -v -RL/ i cd ..\/dist' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -6168,28 +6859,25 @@ print $0
         >> $Output
     ;;
     openjdk)
-       GetInternalCommands OpenJDKComms >> $Output
+       GetInternalCommands openjdkComms >> $Output
     ;;
     openldap)
        GetCommands \
-        | sed -e '/make install-slapd/,/ldapsearch/d' \
+        | sed -e '/chown -R ldap:ldap/,/ldapsearch/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     openssh)
        if ! $as_root; then
          GetCommands \
-          | sed -e '/install -v -m700 -d/,/-s \/bin\/false -u 50 sshd/d' \
-                -e 's/--prefix=\/usr           /--prefix=\/usr --libexecdir=\/usr\/lib\/ssh/' \
-                -e '/make tests/,/grep FATAL/d' \
+          | sed -e '/install -v -m700 -d \/var\/lib\/sshd/,/-s \/bin\/false -u 50 sshd/d' \
                 -e '/ssh-keygen/,/echo "ChallengeResponseAuthentication/d' \
                 -e '/make install-sshd/d' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
        else
          GetCommands \
-          | sed -e '/make tests/,/grep FATAL/d' \
-                -e '/ssh-keygen/,/echo "ChallengeResponseAuthentication/d' \
+          | sed -e '/ssh-keygen/,/echo "ChallengeResponseAuthentication/d' \
                 -e '/make install-sshd/d' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
@@ -6214,13 +6902,24 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    pcre)
+       if [ "$SYSTEMD" = yes ]; then 
+         GetCommands \
+          | sed -e '/mv -v/,/ln -sfv/d' \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands  >> $Output
+       fi
+    ;;
     php)
        rtrnCom="" # need the version of php used in the book commands
        getComms $pkgname
        numcomms=${#rtrnCom[@]}
        phpXBookVers ${rtrnCom[numcomms-10]}
        GetCommands \
-        | sed -e 's/--sysconfdir=\/etc/--sysconfdir=\/etc --mandir=\/usr\/share\/man/' \
+        | sed -e 's/--prefix=\/usr/${_phpconfig} ${_phpextensions} --disable-cgi/' \
+              -e 's/--sysconfdir=\/etc/--sysconfdir=\/etc --mandir=\/usr\/share\/man/' \
               -e '/install -v -m644 p/a\  install -v -m755 -d \/usr\/share\/doc\/php-'"${phpvers}"'\n  install -v -m644 ..\/php_manual_en.html.gz \/usr\/share\/doc\/php-'"${phpvers}"'' \
               -e '/tar -xvf/,/-C \/usr\/share\/doc\/php-'"${phpvers}"' --no-same-owner/d' \
               -e "s/$phpXbookvers/$phpvers/" \
@@ -6239,7 +6938,7 @@ print $0
          if [ "$SYSTEMD" = yes ]; then
            GetCommands \
             | sed -e '/groupadd/,/-g polkitd -s \/bin\/false polkitd/d' \
-                  -e 's/--with-authfw=shadow \\/--with-systemdsystemunitdir=\/lib\/systemd\/system \\/' \
+                  -e 's/--with-authfw=shadow \\/--with-systemdsystemunitdir=\/usr\/lib\/systemd\/system \\\n\             --enable-libsystemd-login=yes \\/' \
                   -e 's/\(.*\)&&$/\1/' \
             >> $Output
          else
@@ -6252,7 +6951,7 @@ print $0
        else
          if [ "$SYSTEMD" = yes ]; then
            GetCommands \
-            | sed -e 's/--with-authfw=shadow \\/--with-systemdsystemunitdir=\/lib\/systemd\/system \\/' \
+            | sed -e 's/--with-authfw=shadow \\/--with-systemdsystemunitdir=\/usr\/lib\/systemd\/system \\/' \
                   -e 's/\(.*\)&&$/\1/' \
             >> $Output
          else
@@ -6265,7 +6964,8 @@ print $0
     ;;
     ptlib)
        GetCommands \
-        | sed -e "/make install/i\  sed -i '163,164d' Makefile" \
+        | sed -e "/make install/i\  sed -e '/mkdir -p \$(DESTDIR)\$(LIBDIR)\\\/pkgconfig/d' \\\\" \
+              -e "/make install/i\      -e '/chmod 755 \$(DESTDIR)\$(LIBDIR)\\\/pkgconfig/d' -i Makefile" \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -6275,13 +6975,40 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
-    py3cairo|pyxdg|docutils)
+    py2-atspi)
+       GetInternalCommands py2atspiComms >> $Output
+    ;;
+    py3-atspi)
+       GetInternalCommands py2atspiComms \
+        | sed -e 's/python2/python3/' \
+        >> $Output
+    ;;
+    py3cairo|py2-xdg|py3-xdg|docutils)
        GetInternalCommands pyComms >> $Output
     ;;
-    pygobject3)
-       GetInternalCommands  basicComms \
+    py2-dbus)
+       GetInternalCommands py2dbusComms >> $Output
+    ;;
+    py3-dbus)
+       GetInternalCommands py3dbusComms >> $Output
+    ;;
+    py2-gobject3)
+       GetInternalCommands basicComms \
         | sed -e "/configure_commands()/i sed -i '/Werror=format/d' configure" \
+              -e 's/disable-static/disable-static --with-python=\/usr\/bin\/python2/' \
         >> $Output
+    ;;
+    py3-gobject3)
+       GetInternalCommands basicComms \
+        | sed -e "/configure_commands()/i sed -i '/Werror=format/d' configure" \
+              -e 's/disable-static/disable-static --with-python=\/usr\/bin\/python3/' \
+        >> $Output
+    ;;
+    pysolfc)
+       GetInternalCommands pysolfcComms >> $Output
+    ;;
+    pysolss)
+       GetInternalCommands pysolssComms >> $Output
     ;;
     python2)
        GetCommands \
@@ -6295,21 +7022,22 @@ print $0
     ;;
     python3)
        GetCommands \
-        | sed -e '/tar --strip/ i install -v -m755 -d /usr/share/doc/Python-3.3.1/html' \
+        | sed -e '/tar --strip/ i install -v -m755 -d /usr/share/doc/python-${Python3vers}/html' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
-    qt4)
+    qtchooser)
        GetCommands \
-        | sed -e '/ldconfig/d' \
+        | sed -e '/ln -sfv 5.conf/d' \
+              -e '/export QT_SELECT=5/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     samba)
        GetCommands \
-        | sed -e '/\/etc\/openldap\/schema/,/ln -v -s ..\/..\/samba\/swat/d' \
-              -e '/ln -v -sf \/usr\/bin\/smbspool/d' \
-              -e '/groupadd/,/make install-swat/d' \
+        | sed -e 's/pammodulesdir=\/lib/pammodulesdir=\/usr\/lib/' \
+              -e 's/wrapper/wrapper --with-sockets-dir=\/var\/run\/samba \\\n\      --with-swat --with-winbind --with-pam --with-configdir=\/etc\/samba \\\n\      --with-lockdir=\/var\/cache\/samba/' \
+              -e '/mv -v/,/make install-swat/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -6332,6 +7060,9 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    seed)
+       GetInternalCommands basicComms >> $Output
+    ;;
     sgml-common)
        GetCommands \
         | sed -e '/install-catalog --remove/,/\/etc\/sgml\/sgml-ent.cat/d' \
@@ -6345,19 +7076,21 @@ print $0
           GetCommands \
           | sed -e '/DICTPATH\\t\/lib\/cracklib/d' \
               -e "/configure_commands()/i sed -i -e 's\/po cs da de es fi fr hu id it ja pl pt_BR ru sv tr \\\\\\\//' \\\\\n -e 's\/zh_CN zh_TW\/\/' \\\\\n -e 's\/po cs da de es fi fr hu id it ja pl pt_BR ru sv tr\//'  man/Makefile.in" \
+              -e '/mv -v \/usr\/bin\/passwd/d' \
               -e 's/\(.*\)&&$/\1/' \
           >> $Output
         else
           GetCommands \
           | sed -e '/DICTPATH\\t\/lib\/cracklib/d' \
               -e "/configure_commands()/i sed -i -e 's\/po cs da de es fi fr hu id it ja pl pt_BR ru sv tr \\\\\\\//' \\\\\n -e 's\/zh_CN zh_TW\/\/' \\\\\n -e 's\/po cs da de es fi fr hu id it ja pl pt_BR ru sv tr\//'  man/Makefile.in" \
+              -e '/mv -v \/usr\/bin\/passwd/d' \
               -e 's/\(.*\)&&$/\1/' \
           >> $Output
         fi
     ;;
     speechd)
        GetInternalCommands basicComms \
-        | sed -e 's/\.\/configure --prefix=\/usr/\.\/configure --prefix=\/usr \\\n\   --sysconfdir=\/etc \\\n\   --without-flite/' \
+        | sed -e 's/disable-static/disable-static --without-flite/' \
         >> $Output
     ;;
     sqlite)
@@ -6369,6 +7102,13 @@ print $0
     ;;
     squid)
        GetInternalCommands squidComms >> $Output
+    ;;
+    subversion)
+       GetCommands \
+        | sed -e 's/disable-static/disable-static \\\n\              --with-apr=\/usr --with-apr-util=\/usr \\\n\              --with-apache-libexecdir=\/usr\/lib\/httpd\/modules \\\n\              --with-ruby-sitedir=\/usr\/lib\/ruby\/vendor_ruby/' \
+              -e '/cp -v -R sqlite-doc/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
     ;;
     sudo)
        GetCommands \
@@ -6385,21 +7125,43 @@ print $0
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    tlpthy-frstream)
+        GetInternalCommands tlpthyfrstreamComms  >> $Output
+    ;;
+    telepathy-glib)
+        GetInternalCommands telepathyglibComms  >> $Output
+    ;;
+    telepathy-logr)
+        GetInternalCommands telepathylogrComms  >> $Output
+    ;;
+    tpthymisscntrl)
+        GetInternalCommands tpthymisscntrlComms  >> $Output
+    ;;
+    traceroute)
+       GetCommands \
+        | sed -e '/mv \/usr\/bin\/traceroute/d' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     udev)
        rtrnCom="" # need the version of udev from the udev-lfs tar file
        getComms $pkgname
        udevXBookVers ${rtrnCom[0]}
        GetCommands \
         | sed -e "s/$udevXbookvers/$udevvers/" \
-              -e "/install-keymap/i\  sed -i -e '/samsung-90/d' udev-lfs-$udevvers/makefile-incl.keymap" \
+              -e '/sed -i -e/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     udisks)
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e 's/--disable-static/--disable-static --with-systemdsystemunitdir=\/lib\/systemd\/system/' \
+          | sed -e 's/--disable-static/--disable-static --with-systemdsystemunitdir=\/usr\/lib\/systemd\/system/' \
                 -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+       else
+         GetCommands \
+          | sed -e 's/\(.*\)&&$/\1/' \
           >> $Output
        fi
     ;;
@@ -6408,18 +7170,25 @@ print $0
         | sed -e '/This.block.must.be.edited/,/End.of.editable.block/d' \
         >> $Output
     ;;
+    upower) # put udev rules in /usr/lib
+       GetCommands \
+        | sed -e '/configure_commands()/i sed -i "\/slashlibdir=\/s#\/lib#\/usr\/lib#" configure' \
+              -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     v4l-utils)
        GetInternalCommands v4lComms >> $Output
     ;;
     vlc)
        GetCommands \
-        | sed -e '/gtk-update-icon-cache/,/update-desktop-database/d' \
+        | sed -e 's/--prefix=\/usr/--prefix=\/usr --disable-lua/' \
+              -e '/gtk-update-icon-cache/,/update-desktop-database/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
     wavpack)
        GetInternalCommands basicComms \
-        | sed -e 's/\.\/configure --prefix=\/usr/\.\/configure --prefix=\/usr \\\n\   --enable-mmx \\\n\   --disable-static/' \
+        | sed -e 's/disable-static/disable-static --enable-mmx/' \
         >> $Output
     ;;
     webkitgtk)
@@ -6436,6 +7205,13 @@ print $0
           >> $Output
        fi
     ;;
+    webkitgtk2)
+         GetCommands \
+          | sed -e '/sed -i/d' \
+                -e "/configure_commands()/i sed -i '\/parse-param\/ a%lex-param {YYLEX_PARAM}' \\\\\n\           Source\/ThirdParty\/ANGLE\/src\/compiler\/glslang.y" \
+                -e 's/\(.*\)&&$/\1/' \
+          >> $Output
+    ;;
     which)
        GetCommands \
         | sed -e '/cat/,/chown/d' \
@@ -6445,7 +7221,7 @@ print $0
     wpa_supplicant)
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e 's/update-desktop-database/install -m644 systemd\/*.service \/lib\/systemd\/system/' \
+          | sed -e 's/update-desktop-database/install -m644 systemd\/*.service \/usr\/lib\/systemd\/system/' \
                 -e '/wpa_passphrase/,/ifup/d' \
                 -e 's/\(.*\)&&$/\1/' \
           >> $Output
@@ -6458,7 +7234,9 @@ print $0
     ;;
     x264)
        GetInternalCommands basicComms \
-        | sed -e 's/make install/make bindir=\/usr\/bin \\\n\   libdir=\/usr\/lib \\\n\   includedir=\/usr\/include \\\n\   install/' \
+        | sed -e '/configure/,/disable-static/d' \
+              -e '/configure_commands()/a\  ./configure --enable-shared --enable-pic' \
+              -e 's/make install/make bindir=\/usr\/bin \\\n\   libdir=\/usr\/lib \\\n\   includedir=\/usr\/include \\\n\   install/' \
         >> $Output
     ;;
     $xapp)
@@ -6466,10 +7244,16 @@ print $0
         | sed -e 's/bash -e/set -e/' \
               -e '/for package in/ i cd $cursec' \
               -e '/configure/i\  for curFile in .\/*; do\n  permval=$(stat -c %a $curFile)\n  if [ $permval -eq 555 ]; then\n   chmod 755 $curFile\n  fi\n  done' \
-              -e 's/XORG_CONFIG/XORG_CONFIG --disable-selective-werror/' \
-              -e 's/as_root make install/make install/' \
+              -e 's/XORG_CONFIG/XORG_CONFIG --disable-selective-werror 2>\&1 | tee ..\/\${packagedir}-configure.log/' \
+              -e 's/as_root make install/make install 2>\&1 | tee ..\/\${packagedir}-install.log/' \
               -e '/exit/d' \
               -e 's/\(.*\)&&$/\1/' \
+         | awk '{
+if( $1 == "make" && $2 == "")
+  print "  "$1" 2>&1 | tee ../${packagedir}-make.log";
+else
+  print $0;
+}' \
        >> $Output
     ;;
     xfce4-session)
@@ -6484,11 +7268,27 @@ print $0
         | sed -e 's/bash -e/set -e/' \
               -e '/for package in/ i cd $cursec' \
               -e '/case $packagedir in/i\  for curFile in .\/*; do\n  permval=$(stat -c %a $curFile)\n  if [[ $permval -eq 555 || $permval -eq 444 ]]; then\n   chmod 755 $curFile\n  fi\n  done' \
-              -e 's/as_root make install/make install/' \
+              -e 's/disable-devel-docs/disable-devel-docs 2>\&1 | tee ..\/\${packagedir}-configure.log/' \
+              -e 's/appdefaultdir=\/etc\/X11\/app-defaults/appdefaultdir=\/etc\/X11\/app-defaults 2>\&1 | tee ..\/\${packagedir}-configure.log/' \
+              -e 's/as_root make install/    make install 2>\&1 | tee ..\/\${packagedir}-install.log/' \
               -e '/as_root \/sbin\/ldconfig/d' \
               -e '/exit/d' \
               -e '/ln -sv \$XORG_PREFIX/d' \
               -e 's/\(.*\)&&$/\1/' \
+        | awk '{
+if ($1 == "./configure" && $2 == "$XORG_CONFIG")
+{
+  icount++;
+  if (icount == 3)
+    print "      "$1" "$2" 2>&1 | tee ../${packagedir}-configure.log";
+  else
+    print $0;
+}
+else if ($1 == "make" && $2 == "")
+  print "      "$1" 2>&1 | tee ../${packagedir}-make.log";
+else
+  print $0;
+}' \
        >> $Output
     ;;
     xorg-server)
@@ -6498,18 +7298,33 @@ print $0
                -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    xorg-vmmouse)
+        GetCommands \
+         | sed -e 's/--with-udev-rules-dir=\/lib/--with-udev-rules-dir=\/usr\/lib/' \
+               -e 's/\(.*\)&&$/\1/' \
+        >> $Output
+    ;;
     $xproto|$xfont)
         GetXCommands \
-        | sed -e 's/bash -e/set -e/' \
+         | sed -e 's/bash -e/set -e/' \
               -e '/for package in/ i cd $cursec' \
-              -e 's/as_root make install/make install/' \
+              -e '/.\/configure \$XORG_CONFIG/i\  for curFile in .\/*; do\n  permval=$(stat -c %a $curFile)\n  if [[ $permval -eq 555 || $permval -eq 444 ]]; then\n   chmod 755 $curFile\n  fi\n  done' \
+              -e 's/.\/configure \$XORG_CONFIG/.\/configure \$XORG_CONFIG 2>\&1 | tee ..\/\${packagedir}-configure.log/' \
+              -e 's/as_root make install/make install 2>\&1 | tee ..\/\${packagedir}-install.log/' \
               -e '/exit/d' \
               -e 's/\(.*\)&&$/\1/' \
+         | awk '{
+if( $1 == "make" && $2 == "")
+  print "  "$1" 2>&1 | tee ../${packagedir}-make.log";
+else
+  print $0;
+}' \
        >> $Output
     ;;
     xterm)
         GetCommands \
          | sed -e '/make install-ti/d' \
+               -e '/cat/,/EOF/d' \
                -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -6523,8 +7338,12 @@ print $0
     ;;
     yajl)
        GetInternalCommands basicComms \
-        | sed -e 's/\.\/configure --prefix=\/usr/cmake -DCMAKE_INSTALL_PREFIX=\/usr ./' \
+        | sed -e '/configure/,/disable-static/d' \
+              -e '/configure_commands()/a\  cmake -DCMAKE_INSTALL_PREFIX=\/usr ./' \
         >> $Output
+    ;;
+    zenity)
+       GetInternalCommands basicComms >> $Output
     ;;
     *)
         GetCommands \
@@ -6598,14 +7417,22 @@ countdep=0
 for (( k=0; k<${#tstDeps[@]}; k++ ))
 do
   pfile=$(echo ${tstDeps[k]} | awk 'BEGIN {FS="/"}{print $2}')
-  testfile=${PKGUSERDIR}/${tstDeps[k]}/.$pfile
+  case $pfile in
+    systemd_gudev)
+        tstDeps[k]="core/systemd"
+    ;;
+    udev_extras)
+        tstDeps[k]="core/udev"
+    ;;
+  esac
+  testfile=${PKGUSERDIR}/${tstDeps[k]}/.${pfile}
   if [ ! -f $testfile ]; then 
     if [ "$SYSTEMD" = yes ]; then 
       case $pfile in 
-         expat|intltool|dbus|attr|gperf|libcap|xml-parser)
+         expat|intltool|dbus|attr|acl|gperf|libcap|xml-parser)
            : # already installed in lfs
          ;;
-         udev|consolekit)
+         udev_extras|consolekit)
            : # not needed - replaced by systemd
          ;;
          *)
@@ -6613,7 +7440,14 @@ do
          ;;
       esac
     else
-      stordep[countdep++]=${tstDeps[k]}
+      case $pfile in
+         netctl|systemd_gudev)
+           : # not required if not systemd
+         ;;
+         *) 
+           stordep[countdep++]=${tstDeps[k]}
+         ;;
+      esac
     fi
   fi
 done
@@ -6716,16 +7550,39 @@ pkgToTest=$1
 InSection=$2
 pkgFiles=${BLFSBUILDFILES}/files/${InSection}-files
 if [ ! -e $pkgFiles ]; then # try and get the section-files
-  GetBLFSfiles
-  return_val=$?
-  if [ $return_val -eq $RETURN_PARAM ]; then
+  if [ ! -e ${LFS}/${blfsfilesTar} ]; then
     echo "The file $blfsfilesTar should be in $LFS"
     echo "Please place it there in order to continue"
     echo "Exiting now"
     exit 1
-  fi  
+  else # tar file exists so unpack it
+    if [ ! -d ${LFS}${blfsBuildFiles} ]; then 
+      install -v -m0755 -d ${LFS}${blfsBuildFiles}
+    fi
+    if [ -d $BLFSBUILDFILES ]; then
+      rm -rf $BLFSBUILDFILES
+    fi
+    unpackBLFSfiles # files define pkg names and dependencies
+  fi
+else # section files exist - but first test if tar file present
+  if [ -e ${LFS}/${blfsfilesTar} ]; then # ask if want to replace the build files
+    echo "**Warning** - $blfsfilesTar present and $BLFSBUILDFILES exists."
+    echo "Replace $BLFSBUILDFILES with the contents of $blfsfilesTar? (Y/n)"
+    read reply
+      case $reply in
+         [nN]|[nN][Oo])
+            echo "okay - continuing with existing $BLFSBUILDFILES"
+         ;;
+         *)
+            echo "okay replacing $BLFSBUILDFILES"
+            rm -rf ${LFS}${blfsBuildFiles}
+            mkdir -pv ${LFS}${blfsBuildFiles}
+            unpackBLFSfiles
+         ;;
+      esac
+  fi 
 fi
-#test if the section-files exists
+# test again if the section-files exist
 if [ ! -e $pkgFiles ]; then
   echo "Couldn't find $pkgFiles"
   if [ "$InSection" = all ]; then
@@ -6895,11 +7752,13 @@ do
           Function
        ;;
        udev) # change command name to udev-extras
-          cursection=core
-          commandname=udev-extras
-          srcname=systemd-
-          if ! $as_root; then updatePkgUser; fi
-          Function
+          if [ "$SYSTEMD" = no ]; then
+            cursection=core
+            commandname=udev-extras
+            srcname=systemd-
+            if ! $as_root; then updatePkgUser; fi
+            Function
+          fi
        ;;
        *)
           Function
@@ -6910,11 +7769,11 @@ done
 #
 awk '/_\ \(\)\ \{/ {print $1}' $Output >> /tmp/.9876543
 #
-# this next section allows you to change the order of, or remove, a package here
+# this next section allows you to change the order of, or remove, a package
 #
 while read eachFunc; do
   case $eachFunc in
-      expat_|intltool_|dbus_|attr_|gperf_|libcap_|xmlparser_|firewall_|udev_|consolekit_) # test if systemd used
+      expat_|intltool_|dbus_|attr_|acl_|gperf_|libcap_|xmlparser_|firewall_|udev_|consolekit_) # test if systemd used
           if [ "$SYSTEMD" = no ]; then echo $eachFunc >> $Output; fi
       ;;
       systemd_) # don't use if SYSTEMD is no
@@ -6959,7 +7818,7 @@ local pkgvers=""
 if [ ! -e $pkgloc ]; then return $RETURN_PARAM; fi # pkg loc does not exist
 fnd=$( ls -l $pkgloc | grep ${pkgnm}[0-9].*.tar.*z* | awk '{print $NF}' )
 fileExt="${fnd#*${pkgnm}}"
-pkgvers="${fileExt%.${trim}*}"
+pkgvers="${fileExt%${trim}*}"
 rtrvers=($pkgvers)
 return 0
 } # end GetPkgVersion
@@ -7022,21 +7881,27 @@ else
     echo "Will produce a script called $SINGLE_PACKAGE.sh for this single package"
   fi
 fi
+#
+# get the book
+#
+bookDir=$BLFS_BOOK_LOC_DIR
+if [ "$BOOK_VERSION" = systemd ]; then bookDir=${bookDir}/SYSTEMD; fi
+#
 if [ $BOOK = "svn" ]; then
   GetSvnUrl # make sure the svn url is set
   if [ $BOOK_VERSION != "blank" ]; then #check if the requested book is present locally
-    ChkLocalBook
+    ChkLocalBook ${bookDir}/${BOOK_VERSION}
     SetBLFSBook
   else #version set to blank so ask for which book
     WhichBLFSBook # choose which BLFS version to download the xml files
     # check if the requested book is already present locally
-    ChkLocalBook
+    ChkLocalBook $bookDir/${BOOK_VERSION}
   fi
-  CleanLocalREPO # delete any files in local book repository
-  CheckoutSVN  # svn the requested book xml files
+  if [ "$SOURCES" = download ]; then CleanLocalREPO $bookDir/${BOOK_VERSION}; fi # delete any files in local book repository
+  CheckoutSVN  $bookDir/${BOOK_VERSION} # svn the requested book xml files
 else  # local book requested. Make sure it exists
   if [ "$BOOK_VERSION" = "blank" ]; then # need to choose book version
-    GetLocalREPO
+    GetLocalREPO $bookDir/${BOOK_VERSION}
     return_val=$?
     if [ $return_val -eq $RETURN_PARAM ]; then #no local book found
       echo "You did not choose a local $REPO book"
@@ -7047,7 +7912,7 @@ else  # local book requested. Make sure it exists
       LocalBook
     fi
   else
-    ChkLocalBookExists
+    ChkLocalBookExists $bookDir/${BOOK_VERSION}
     return_val=$?
     if [ $return_val -eq $RETURN_PARAM ]; then #no local book found
       echo "The requested book was not found at $BLFS_BOOK_LOC_DIR."
@@ -7059,17 +7924,50 @@ else  # local book requested. Make sure it exists
     fi
   fi
 fi
-DumpCommands $REPO # get the commands from the book
-if ! $single_package; then
-  GetBLFSfiles # files define pkg names and dependencies
-  return_val=$?
-  if [ $return_val -eq $RETURN_PARAM ]; then
-    echo "The file $blfsfilesTar should be in $LFS"
-    echo "Please place it there in order to continue"
-    echo "Exiting now"
-    exit 1
+DumpCommands $REPO $bookDir/${BOOK_VERSION} # get the commands from the book
+#
+if ! $single_package; then # test if the build files dir exists
+  if [ ! -d $BLFSBUILDFILES ]; then # doesn't exist so try and build it
+    if [ ! -e ${LFS}/${blfsfilesTar} ]; then
+      echo "The file $blfsfilesTar should be in $LFS"
+      echo "Please place it there in order to continue"
+      echo "Exiting now"
+      exit 1
+    else # tar file exists so unpack it
+      if [ ! -d ${LFS}${blfsBuildFiles} ]; then
+        mkdir -pv ${LFS}${blfsBuildFiles}
+      fi
+      unpackBLFSfiles # files define pkg names and dependencies
+    fi
+  else # build files exist - test if tar file present
+    if [ -e ${LFS}/${blfsfilesTar} ]; then # ask if want to replace the build files
+      echo "**Warning** - $blfsfilesTar present and $BLFSBUILDFILES exists."
+      echo "Replace $BLFSBUILDFILES with the contents of $blfsfilesTar? (Y/n)"
+      read reply
+        case $reply in
+           [nN]|[nN][Oo])
+              echo "okay - continuing with existing $BLFSBUILDFILES"
+           ;;
+           *)
+              echo "okay replacing $BLFSBUILDFILES"
+              rm -rf ${LFS}${blfsBuildFiles}
+              mkdir -pv ${LFS}${blfsBuildFiles}
+              unpackBLFSfiles
+           ;;
+        esac
+    fi
   fi
 fi
+#
+# update the proxy settings for wget
+#
+ipadd=$(ip addr | grep 192 | awk '{print $2}' | awk -F\/ '{print $1}')
+proxyset=http://${ipadd}:3128/
+http_proxy=$proxyset
+ftp_proxy=$proxyset
+all_proxy=socks://${ipadd}:3128/
+https_proxy=$proxyset
+#
 SetupSections # create the array SectionsAll. Contains the sections to build
 for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the sources
   Section=${SectionsALL[$ij]}
@@ -7102,7 +8000,7 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
         rm -rf ${SOURCEDIR}/${Section}/${xapp}
         rm -rf ${SOURCEDIR}/${Section}/${xfont}
       fi
-      GetListFile #get wget-list
+      GetListFile $bookDir  #get wget-list
       GetSources $Section rtrnPkg[@] rtrnSrc[@] # download the sources in the wget-list file
     fi
 # check all requested src files are present
@@ -7115,9 +8013,9 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
       fi
       ret_val=$?
       if [ $ret_val -eq $RETURN_PARAM ]; then 
-        echo "Not all requested files in ${SOURCEDIR}/${Section}/${WgetList} have been downloaded"
-        echo "If the required source(s) is/are not being downloaded with wget in the script, then"
-        echo "you will have to download it/them yourself and place in ${SOURCEDIR}/${Section}"
+        echo "Not all requested files in ${SOURCEDIR}/${Section}/${WgetList} have been downloaded."
+        echo "If the required sources are not being downloaded with wget in the script, then"
+        echo "you will have to download them yourself and place in ${SOURCEDIR}/${Section}"
         echo "Do you want to continue? (Y/n)"
         read reply
         case $reply in
@@ -7140,9 +8038,9 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
     ChkEmptySrcFiles $Section #check for empty source files
     return_val=$?
     if [ $return_val -eq $RETURN_PARAM ]; then
-      echo "Dir ${LFS}${srcrootdir}/${Section} is empty or has empty files"
-      echo "If the required source(s) is/are not being downloaded with wget in the script, then"
-      echo "you will have to download the required source(s) to this dir."
+      echo "Dir ${LFS}${srcrootdir}/${Section} is empty or has empty files."
+      echo "If the required sources are not being downloaded with wget in the script, then"
+      echo "you will have to download them to ${LFS}${srcrootdir}/${Section}"
       echo "Continuing to make the script(s) for section $Section"
     fi
     if [ "$Section" = browser ]; then
@@ -7163,7 +8061,7 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
             fi           
           fi
           rtrvers=""
-          GetPkgVersion $firefoxloc firefox- source
+          GetPkgVersion $firefoxloc firefox- .source
           ffoxvers=$rtrvers
           echo "Firefox version is $ffoxvers"
         fi
@@ -7171,10 +8069,70 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
     fi
     if ! $single_package; then
       case $Section in
+        avr)
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/gcc gcc- .tar # for gcc version
+          retval=$?
+          if [ $retval -eq $RETURN_PARAM ]; then
+            echo "**WARNING** ${LFS}${PKGUSERDIR}/core/gcc doesn't exist"
+            echo "You won't be able to install avrgcc here"
+            echo "You should install it manually instead"
+          else
+            gccvers=$rtrvers
+            echo "gcc version is $gccvers"
+          fi
+        ;;
+        libraries)
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/perl perl- .tar
+          perlvers=$rtrvers
+          echo "perl version is $perlvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/libraries freetype- .tar
+          freetypevers=$rtrvers
+          echo "freetype version is $freetypevers"
+        ;;
+        programming)
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/perl perl- .tar
+          perlvers=$rtrvers
+          echo "perl version is $perlvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming php- .tar
+          phpvers=$rtrvers
+          echo "php version is $phpvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming Python-2. .tar
+          Python2vers=2.$rtrvers
+          echo "Python2 version is $Python2vers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming Python-3. .tar
+          Python3vers=3.$rtrvers
+          echo "Python3 version is $Python3vers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming git- .tar
+          gitvers=$rtrvers
+          echo "git version is $gitvers"
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming jdk- -linux
+          jdkvers=$rtrvers
+          echo "jdk version is $jdkvers"
+        ;;
+        security)
+          rtrvers=""
+          GetPkgVersion ${LFS}${PKGUSERDIR}/core/coreutils coreutils- .tar
+          coreutilsvers=$rtrvers
+          echo "coreutils version is $coreutilsvers"
+        ;;
         sysutils)
-          if [ "$SYSTEMD" = no ]; then
+          if [ "$SYSTEMD" = yes ]; then
             rtrvers=""
-            GetPkgVersion ${LFS}${PKGUSERDIR}/core/udev udev-lfs- tar # for udev version
+            GetPkgVersion ${LFS}${PKGUSERDIR}/core/systemd systemd- .tar
+            systemdvers=$rtrvers
+            echo "systemd version is $systemdvers"
+          else
+            rtrvers=""
+            GetPkgVersion ${LFS}${PKGUSERDIR}/core/udev udev-lfs- .tar # for udev version
             retval=$?
             if [ $retval -eq $RETURN_PARAM ]; then
               echo "**WARNING** ${LFS}${PKGUSERDIR}/core/udev doesn't exist"
@@ -7186,93 +8144,49 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
             fi
           fi
         ;;
-        libraries)
-          rtrvers=""
-          GetPkgVersion ${LFS}${PKGUSERDIR}/core/perl perl- tar
-          perlvers=$rtrvers
-          echo "perl version is $perlvers"
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/libraries freetype- tar
-          freetypevers=$rtrvers
-          echo "freetype version is $freetypevers"
-        ;;
-        programming)
-          rtrvers=""
-          GetPkgVersion ${LFS}${PKGUSERDIR}/core/perl perl- tar
-          perlvers=$rtrvers
-          echo "perl version is $perlvers"
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming php- tar
-          phpvers=$rtrvers
-          echo "php version is $phpvers"
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming Python-2. tar
-          Python2vers=2.$rtrvers
-          echo "Python2 version is $Python2vers"
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming Python-3. tar
-          Python3vers=3.$rtrvers
-          echo "Python3 version is $Python3vers"
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming git- tar
-          gitvers=$rtrvers
-          echo "git version is $gitvers"
-        ;;
-        server)
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/server mysql- tar
-          mysqlvers=$rtrvers
-          echo "mysql version is $mysqlvers"
-        ;;
-        security)
-          rtrvers=""
-          GetPkgVersion ${LFS}${PKGUSERDIR}/core/coreutils coreutils- tar
-          coreutilsvers=$rtrvers
-          echo "coreutils version is $coreutilsvers"
-        ;;
       esac
     else
       case $SINGLE_PACKAGE in
         freetype)
           rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/libraries freetype- tar
+          GetPkgVersion ${LFS}${srcrootdir}/libraries freetype- .tar
           freetypevers=$rtrvers
           echo "freetype version is $freetypevers"
         ;;
         git)
           rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming git- tar
+          GetPkgVersion ${LFS}${srcrootdir}/programming git- .tar
           gitvers=$rtrvers
           echo "git version is $gitvers"
         ;;
-        mysql)
-          rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/server mysql- tar
-          mysqlvers=$rtrvers
-          echo "mysql version is $mysqlvers"
-        ;;
         php)
           rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming php- tar
+          GetPkgVersion ${LFS}${srcrootdir}/programming php- .tar
           phpvers=$rtrvers
           echo "php version is $phpvers"
         ;;
         python2)
           rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming Python-2. tar
+          GetPkgVersion ${LFS}${srcrootdir}/programming Python-2. .tar
           Python2vers=2.$rtrvers
           echo "Python2 version is $Python2vers"
         ;;
         python3)
           rtrvers=""
-          GetPkgVersion ${LFS}${srcrootdir}/programming Python-3. tar
+          GetPkgVersion ${LFS}${srcrootdir}/programming Python-3. .tar
           Python3vers=3.$rtrvers
           echo "Python3 version is $Python3vers"
+        ;;
+        jdkbin)
+          rtrvers=""
+          GetPkgVersion ${LFS}${srcrootdir}/programming jdk- -linux
+          jdkvers=$rtrvers
+          echo "jdk version is $jdkvers"
         ;;
         udev)
           if [ "$SYSTEMD" = no ]; then
             rtrvers=""
-            GetPkgVersion ${LFS}${PKGUSERDIR}/core/udev udev-lfs- tar
+            GetPkgVersion ${LFS}${PKGUSERDIR}/core/udev udev-lfs- .tar
             retval=$?
             if [ $retval -eq $RETURN_PARAM ]; then
               echo "**WARNING** ${LFS}${PKGUSERDIR}/core/udev doesn't exist"

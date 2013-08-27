@@ -4,47 +4,48 @@
 ./security.sh # for openssl
 ./networks.sh # for wget
 ./programming.sh # for python2 (only install the binary for OpenJDK)
-./libraries.sh # for glib
 ./sysutils.sh # for which, unzip
-./pst.sh # for docbook-xml,xsl
-./genutils.sh # for pinentry, spidermonkey. Completes all specified packages
+./libraries.sh # for glib
+./genutils.sh # for pinentry, js.
 ./security.sh # for cacerts, openssh
-#
-./networks.sh # for neon and curl
-./programming.sh # for cmake, git, vala
-./server.sh # for db, sqlite, apache, bind and mysql
-./security.sh # if systemd - completes all specified packages. Leaves consolekit.
-./server.sh # for openldap. Completes all specified packages
-./sysutils.sh # reinstall systemd for gudev
+./pst.sh # for docbook-xml,xsl
+./programming.sh # for vala, py2-dbus and py3-dbus
+./server.sh # for db, sqlite, apache and bind
 #
 # install x
 #
 ./x.sh # install up to mesalib, which needs libdrm
-./libraries.sh # for libdrm
+./genutils.sh # for rarian and gtk-doc - completes all specified packages.
+./sysutils.sh # reinstall systemd with gudev and bluez
+./libraries.sh # for libdrm. Also installs libgusb which needs systemd with gudev
 ./x.sh # install the rest of x
 #
+./networks.sh # for neon, curl and netctl
+./programming.sh # for cmake, git, php and subversion
+./security.sh # for polkit, nss, cyrus-sasl - completes all specified packages
 ./xlibs.sh # for atk, cairo
-./libraries.sh # for harfbuzz, libgsf, poppler
-./xlibs.sh # for pango, gtk+-2, gtk+3
-#
-./multimedia.sh # for gstreamer and gst-plugins
-./sysutils.sh # for colord
+./libraries.sh # for libical, harfbuzz, libgsf, poppler
+./xlibs.sh # for pango, gtk+-2, gtk+-3
+./sysutils.sh # for raptor, rasqal, redland, udisks, colord. Leaves ibus
+./multimedia.sh # for gstreamer and plugins
+./libraries.sh # for libglade, libunique, librsvg
+./programming.sh # for python modules
+./xsoftware.sh # for gimp, xdg-utils. Leaves icedtea-web.
+./pst.sh # for cups - completes all specified packages
 ./xlibs.sh # for qt4
-./libraries.sh # for libglade, libunique and librsvg. Leaves telepathy-fstream and missn
-./programming.sh # for pygtk. Completes all specified packages
-./xsoftware.sh # for gimp and xdg-utils. Completes all specified packages
-./pst.sh # for cups. Completes all specified packages
-./networks.sh # for avahi, wpa and samba
-
-# all packages that do not depend on gnome have been installed
-# now install gnome platform
+./networks.sh # for avahi, wpa_supplicant, samba
+#
+# most of the packages that do not depend on gnome have been installed
+# so now install gnome platform
 
 ./gnomeplatform.sh
 ./networks.sh # for libsoup, networkmanager - completes all specified packages
 ./multimedia.sh # for libcanberra - completes all specified packages
 ./libraries.sh # for telepathy-mission - completes all specified packages
 ./sysutils.sh # for ibus - completes all specified packages
-./xlibs.sh # for webkitgtk - completes all specified packages
+./xlibs.sh # for webkitgtk - leaves xulrunner
+./programming.sh # for openjdk
+#
 ./gnomedesktop.sh
 ./gnomeplatform.sh # completes all specified packages
 ./gnomedesktop.sh # completes all specified packages
