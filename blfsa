@@ -14,7 +14,8 @@ blfscommands="/blfs-commands"
 DumpedCommands=${LFS}${blfscommands}
 Dumpedhtml=$LFS/blfs-html
 WgetList="wget-list" # default name for the source list file
-wgetopts="" # Options for wget, e.g. proxy settings, certs etc
+hostwgetopts="" # Options for wget, e.g. proxy settings, certs etc on the host
+wgetopts="" # Options for wget, e.g. proxy settings, certs etc on the LFS machine
 sortedfile="sortedfile" # name of the sorted WgetList file
 anduin_src_root="http://anduin.linuxfromscratch.org/sources/BLFS/svn"
 patch_root="http://www.linuxfromscratch.org/patches/blfs/svn" # patch url
@@ -730,8 +731,8 @@ do
       full_url=${anduin_src_root}/${initial}/${fname} # use anduin
     fi
     if [ "$extName" = patch ]; then full_url=${patch_root}/${fname}; fi
-    wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
-    wget $wgetopts $full_url -P $SrcPath
+    hostwgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
+    wget $hostwgetopts $full_url -P $SrcPath
   fi
 done < ${SrcPath}/${sortedfile}
 #
@@ -2374,6 +2375,16 @@ pysolsscom[3]="python2 setup.py install"
 rtrncommands=(${pysolsscom[@]})
 } # end pysolssComms
 #
+smpegComms () {
+local smpegcom=""
+smpegcom[0]="patch -p1 -i ../smpeg-0.4.4-gcc41-1.patch"
+smpegcom[1]="./configure --prefix=/usr --mandir=/usr/share/man --disable-static"
+smpegcom[2]="make LDFLAGS+=-lstdc++"
+smpegcom[3]="make install"
+smpegcom[4]="sed -i 's#(AM_PATH_SMPEG#([AM_PATH_SMPEG]#' /usr/share/aclocal/smpeg.m4"
+rtrncommands=(${smpegcom[@]})
+} #end smpegComms
+#
 squidComms () {
 local squidcom=""
 squidcom[0]="sed -i '/^DEFAULT_SWAP_DIR/ s@/cache@/cache/squid@' src/Makefile.in"
@@ -2858,7 +2869,7 @@ EOF
   echo "SrcName=$srcname" >> $Output
 # define sourcedir in the build file
   case $pkgname in
-    boost|cups|gnome-menus|gnome-panel|gnm-scrnsaver|gnome-shell|nss) # need to define blfsfiles to apply patches
+    boost|cups|gnome-menus|gnome-panel|gnm-scrnsaver|gnome-shell|nss|smpeg) # need to define blfsfiles to apply patches
      echo "sourcedir=${srcrootdir}/${Section}
 blfsfiles=${blfsBuildFiles}/${blfsfiles}" >> $Output
     ;;
@@ -2888,6 +2899,10 @@ EOF
     echo "source /etc/profile.d/xorg.sh" >> $Output
   fi
 fi # end as_root
+# add a function to set up the proxy values on the LFS machine
+# ** TODO ** make this available only where it's needed
+setproxy >> $Output
+echo "setproxy" >> $Output
 # case to unpack sources
 case $pkgname in
   cacerts)
@@ -2952,8 +2967,8 @@ cd ..
 language="aspell6-en"
 dictionary="${language}-7.1-0.tar.bz2"
 EOF
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat >> $Output << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 if [ ! -e $dictionary ]; then
   wget $wgetopts ftp://ftp.gnu.org/gnu/aspell/dict/en/${dictionary}
 fi
@@ -5214,12 +5229,22 @@ return
 #
 wgetwrite () {
 # $1 is the file version and $2 is the URL
-echo "srcpkg=\"${1}\"
-if [ ! -e \$srcpkg ]; then
-  wget $wgetopts ${2}\${srcpkg}
-fi" >> $Output
-# remove any --no-check-certificate
+cat << "EOF"
 wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
+EOF
+echo "srcpkg=\"${1}\""
+case $pkgname in
+   docutils|libpwquality)
+           echo "if [ ! -e \$srcpkg ]; then
+  wget \$wgetopts --no-check-certificate ${2}\${srcpkg}
+fi" >> $Output
+   ;;
+   *)
+           echo "if [ ! -e \$srcpkg ]; then
+  wget \$wgetopts ${2}\${srcpkg}
+fi" >> $Output
+   ;;
+esac
 case $pkgname in
    espeak) # a zip file downloaded
            cat << "EOF"
@@ -5231,6 +5256,9 @@ EOF
    portaudio) # untars to portaudio
      echo "tar zxf \$srcpkg
 cd portaudio" >> $Output
+   ;;
+   smpeg) # need a patch first so do nothing
+     :
    ;;
    *)
      echo "cd \$(tar vxf \$srcpkg | awk -F\/ 'END{print \$1}')" >> $Output
@@ -5250,6 +5278,19 @@ local vnum="${fext%.${trm}*}" # this is the full vers # e.g 0.16.2
 gnmvers=$(echo $vnum | awk -F\. '{print $1"."$2}') # this is the required version in gnome
 revsrcnm=${srcnm%?} # src name without the trailing -
 } # end gnmPkgVers
+#
+setproxy () {
+# need a function to setup the proxy settings in the build script
+    cat << "EOF"
+setproxy () {
+ipadd=$(ip addr | grep 192 | awk '{print $2}' | awk -F\/ '{print $1}')
+proxyset=http://${ipadd}:3128/
+http_proxy=$proxyset
+ftp_proxy=$proxyset
+https_proxy=$proxyset
+} # end setproxy
+EOF
+} # end setproxy
 #
 unpack () {
     cat << "EOF"
@@ -5316,7 +5357,6 @@ EOF
             pkgURL=ftp://invisible-island.net/dialog/
         ;;
         docutils-)
-            wgetopts="${wgetopts} --no-check-certificate"
             pkgvers=${srcname}0.10.tar.gz
             pkgURL=https://pypi.python.org/packages/source/d/docutils/
         ;;
@@ -5369,7 +5409,6 @@ EOF
             pkgURL=http://libproxy.googlecode.com/files/
         ;;
         libpwquality-)
-            wgetopts="${wgetopts} --no-check-certificate"
             pkgvers=${srcname}1.2.2.tar.bz2
             pkgURL=https://fedorahosted.org/releases/l/i/libpwquality/
         ;;
@@ -5433,8 +5472,8 @@ EOF
      wgetwrite $pkgvers $pkgURL
    ;;
    ghostscript-) # get the fonts too
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 cp ${sourcedir}/${SrcName}*.* .
 extraFont=gnu-gs-fonts-other-6.0.tar.gz
 if [ ! -e $extraFont ]; then
@@ -5450,8 +5489,8 @@ cd $(tar vxf ${SrcName}[0-9]*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    gimp-) # make sure the help file is present. If not download it
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 cp ${sourcedir}/${SrcName}*.tar.*z* .
 if [ ! -e ${SrcName}help* ]; then # download it
   helpfile=gimp-help-2.8.0.tar.bz2
@@ -5550,8 +5589,8 @@ cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    hamcrest-)
-echo "wgetopts=\"$wgetopts\"" >> $Output
            cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 pkgver=1.3
 corejar=${SrcName}core-${pkgver}.jar
 libraryjar=${SrcName}library-${pkgver}.jar
@@ -5574,8 +5613,8 @@ fi
 EOF
    ;;
    icedtea-) # download icedtea and all the additional files
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 _icedtea_ver=2.4.1
 cp ${sourcedir}/${SrcName}${_icedtea_ver}*.patch .
 if [ ! -e rhino1_7R4.zip ]; then
@@ -5617,8 +5656,8 @@ if [ ! -e hotspot.tar.gz ]; then
   wget $wgetopts hotspot.tar.gz ${_url}/hotspot/archive/${_HOTSPOT_CHANGESET}.tar.gz
 fi
 EOF
-echo "wgetopts=\"-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 if [ ! -e rhino1_7R4.zip ]; then
   wget $wgetopts https://github.com/downloads/mozilla/rhino/rhino1_7R4.zip
 fi
@@ -5687,8 +5726,8 @@ EOF
    ;;
 # add this if you want the clang compiler
 #   llvm-)
-#echo "wgetopts=\"$wgetopts\"" >> $Output
 #    cat << "EOF"
+#wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 #clangSrc=cfe-3.3.src.tar.gz
 #compilerrt=compiler-rt-3.3.src.tar.gz
 #releasevers=3.3
@@ -5709,8 +5748,8 @@ cd $(tar vxf ${SrcName}*.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    MesaLib-) # download the glu src and extract to Mesa-xxx not MesaLib
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 glusrc="glu-9.0.0.tar.bz2"
 gludir="glu-9.0.0"
 if [ ! -e $glusrc ]; then
@@ -5737,8 +5776,8 @@ cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    php-) # wget the docs (single html)
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 cp ${sourcedir}/${SrcName}*.* .
 phpManual=php_manual_en.html.gz
 if [ ! -e $phpManual ]; then
@@ -5748,8 +5787,8 @@ cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    Python-3) # get the docs as well
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 pythondocs="python-${Python3vers}-docs-html.tar.bz2"
 if [ ! -e $pythondocs ]; then
 wget $wgetopts http://docs.python.org/ftp/python/doc/${Python3vers}/${pythondocs}
@@ -5762,6 +5801,15 @@ EOF
     cat << "EOF"
 rm -rf shadow*.tar.*z*
 cp ${sourcedir}/${SrcName}*.* .
+cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   smpeg-) # get the source and a patch
+    pkgvers=${srcname}0.4.4.tar.gz
+    pkgURL=ftp://ftp.uwsg.indiana.edu/linux/gentoo/distfiles/
+    wgetwrite $pkgvers $pkgURL
+    cat << "EOF"
+cp ${blfsfiles}/patches/multimedia/smpeg-0.4.4-gcc41-1.patch .
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
@@ -5793,8 +5841,8 @@ EOF
      wgetwrite $pkgvers $pkgURL
    ;;
    Tie-IxHash-)
-echo "wgetopts=\"$wgetopts\"" >> $Output
     cat << "EOF"
+wgetopts="-e use_proxy=yes -e http_proxy=$http_proxy -e ftp_proxy=$ftp_proxy"
 tieixhashSrc=${SrcName}1.22.tar.gz
 if [ ! -e $tieixhashSrc ]; then
 wget $wgetopts http://search.cpan.org/CPAN/authors/id/C/CH/CHORNY/${tieixhashSrc}
@@ -6015,7 +6063,7 @@ case $pkgname in
     ;;   
     cacerts)
         GetcacertsCommands \
-        | sed -e '/wget --output-document/i wgetopts='"$wgetopts"'' \
+        | sed -e '/wget --output-document/i wgetopts="-e use_proxy=yes -e http_proxy=\$http_proxy -e ftp_proxy=\$ftp_proxy"' \
               -e 's/wget --output-document/wget \$wgetopts -O/' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
@@ -7087,6 +7135,9 @@ print $0;
               -e 's/\(.*\)&&$/\1/' \
           >> $Output
         fi
+    ;;
+    smpeg)
+       GetInternalCommands smpegComms >> $Output
     ;;
     speechd)
        GetInternalCommands basicComms \
