@@ -19,12 +19,13 @@ BTW, I should mention that I've removed a lot of the package documentation from 
 
 Version-3.0 This is a major change to the scripts because it enables you to install the packages using systemd, instead of sysvinit. Of course, first you must have installed LFS using systemd - the scripts in LFS-BuildScripts allow you to do this.
 
-The BLFS book no longer gives you the option of installing a full Gnome desktop. These BLFS scripts allow you to do this. The latest version of Gnome (3.9.90 soon to be 3.10) requires the Wayland libraries, which require libxkbcommon. These are not included in the scripts at the moment but I'll add them soon. The scripts work with systemd, building as a package user. I haven't tested installing everything as root and I haven't tested building Gnome using sysvinit, so I don't know if that's possible.
+The BLFS book no longer gives you the option of installing a full Gnome desktop. These BLFS scripts allow you to do this. The latest version of Gnome (3.9.90 soon to be 3.10) requires the Wayland libraries, which require libxkbcommon. As of 2013/08/31 I've added that section. It installs libxkbcommon and the Wayland libraries. The scripts work with systemd, building as a package user. I haven't tested installing everything as root and I haven't tested building Gnome using sysvinit, so I don't know if that's possible.
 
 If you don't use systemd but instead decide to use sysvinit, the blfs-bootscripts are usually installed immediately after a package. The package scripts do not do this so you will have to install the bootscripts yourself. Run blfsa and choose SECTION=blfs and SOURCES=download. This will create blfs.sh. To install a script do: ./blfs.sh <scriptname>  e.g. ./blfs.sh dbus or ./blfs.sh httpd. The scripts are installed with package-user name blfs-btscrpts.
 
 blfsa is fairly large so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site - thanks.
 
+Version-3.1 - added the Wayland libraries.
 Version-3.0 - Major change to allow installation of packages using systemd. Assumes LFS installed with systemd, of course.
 Release2.4 - updated blfsa to set ownership of some cups and cups-filters files to root
 Release2.3 - updates to keep pace with changes to the BLFS book
