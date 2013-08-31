@@ -147,7 +147,7 @@ _edit () {
    elif [ "$tochange" = SOURCES ]; then
      display="Type download or local (if local, source files must be in ${LFS}${srcrootdir}/${SECTION})"
    elif [ "$tochange" = SECTION ]; then
-     display="options are blfs, security, libraries, genutils, sysutils, programming, networks, server, x, xlibs, gnomeplatform, gnomedesktop, gnomeutils, xfce, browser, office, xsoftware, multimedia, pst, avr or ALL"
+     display="options are blfs, security, libraries, genutils, sysutils, programming, networks, server, x, xlibs, gnomeplatform, gnomedesktop, gnomeutils, xfce, browser, office, xsoftware, multimedia, pst, avr, wayland or ALL"
    elif [ "$tochange" = XORG_PREFIX ]; then
      display="Choose the installation prefix for Xorg"
    elif [ "$tochange" = XVERSION ]; then
@@ -1964,50 +1964,50 @@ done
 #
 avrbinutilsComms () {
 local avrbinutilscom=""
-avrbinutilscom[0]="sed -i -e 's/@colophon/@@colophon/' \\"
-avrbinutilscom[1]="       -e 's/doc@cygnus.com/doc@@cygnus.com/' bfd/doc/bfd.texinfo"
-avrbinutilscom[2]="if [ -e ../avr-size.patch ]; then"
-avrbinutilscom[3]="patch -Np0 < ../avr-size.patch"
-avrbinutilscom[4]="else"
-avrbinutilscom[5]='echo "patch avr-size.patch does not exist"'
-avrbinutilscom[6]='echo "Please place it in /usr/src/avr/avr-binutils"'
-avrbinutilscom[7]="exit 1"
-avrbinutilscom[8]="fi"
-avrbinutilscom[9]="mkdir -v ../binutils-build"
-avrbinutilscom[10]="cd ../binutils-build"
-avrbinutilscom[11]="../binutils-2.23.2/configure --prefix=/usr \\"
-avrbinutilscom[12]="--with-lib-path=/usr/lib \\"
-avrbinutilscom[13]="--enable-ld=default \\"
-avrbinutilscom[14]="--enable-gold \\"
-avrbinutilscom[15]="--enable-plugins \\"
-avrbinutilscom[16]="--enable-threads \\"
-avrbinutilscom[17]="--with-pic \\"
-avrbinutilscom[18]="--enable-shared \\"
-avrbinutilscom[19]="--disable-werror \\"
-avrbinutilscom[20]="--disable-multilib \\"
-avrbinutilscom[21]="--target=avr"
-avrbinutilscom[22]="make tooldir=/usr"
-avrbinutilscom[23]='make tooldir=/usr DESTDIR="/tmp/" install'
-avrbinutilscom[24]="cp /tmp/usr/bin/avr-*  /usr/bin/"
-avrbinutilscom[25]="cp /tmp/usr/lib/ldscripts/avr* /usr/lib/ldscripts/"
-avrbinutilscom[26]="for info in as bfd binutils configure gprof ld standards; do"
-avrbinutilscom[27]="cp /tmp/usr/share/info/\${info}.info /usr/share/info/avr-\${info}.info"
-avrbinutilscom[28]="done"
-avrbinutilscom[29]="cp /tmp/usr/share/man/man1/avr-* /usr/share/man/man1/"
-avrbinutilscom[30]="install -v -d /usr/x86_64-unknown-linux-gnu"
-avrbinutilscom[31]="cp -r /tmp/usr/x86_64-unknown-linux-gnu/avr /usr/x86_64-unknown-linux-gnu"
+avrbinutilscom[0]="patch -Np1 -i ../binutils-2.23.2-avr-size.patch"
+avrbinutilscom[1]="patch -Np1 -i ../binutils-2.23.2-texinfo-5.0.patch"
+avrbinutilscom[2]="sed -i '/ac_cpp=/s/\\\$CPPFLAGS/\\\$CPPFLAGS -O2/' libiberty/configure"
+avrbinutilscom[3]="config_guess=\$(./config.guess)"
+avrbinutilscom[4]="rm -rf ../binutils-build"
+avrbinutilscom[5]="mkdir -v ../binutils-build"
+avrbinutilscom[6]="cd ../binutils-build"
+avrbinutilscom[7]="../binutils-2.23.2/configure --prefix=/usr \\"
+avrbinutilscom[8]="                             --with-lib-path=/usr/lib \\"
+avrbinutilscom[9]="                             --enable-ld=default \\"
+avrbinutilscom[10]="                             --enable-gold \\"
+avrbinutilscom[11]="                             --enable-plugins \\"
+avrbinutilscom[12]="                             --enable-threads \\"
+avrbinutilscom[13]="                             --with-pic \\"
+avrbinutilscom[14]="                             --enable-shared \\"
+avrbinutilscom[15]="                             --disable-werror \\"
+avrbinutilscom[16]="                             --disable-multilib \\"
+avrbinutilscom[17]="                             --build=\${config_guess} \\"
+avrbinutilscom[18]="                             --target=avr"
+avrbinutilscom[19]="make configure-host"
+avrbinutilscom[20]="make tooldir=/usr"
+avrbinutilscom[21]="make tooldir=/usr DESTDIR=/tmp install"
+avrbinutilscom[22]="cp /tmp/usr/bin/avr-*  /usr/bin/"
+avrbinutilscom[23]="cp /tmp/usr/lib/ldscripts/avr* /usr/lib/ldscripts/"
+avrbinutilscom[24]="for info in as bfd binutils configure gprof ld standards; do"
+avrbinutilscom[25]="cp /tmp/usr/share/info/\${info}.info /usr/share/info/avr-\${info}.info"
+avrbinutilscom[26]="done"
+avrbinutilscom[27]="cp /tmp/usr/share/man/man1/avr-* /usr/share/man/man1/"
+avrbinutilscom[28]="if [ ! -d /usr/x86_64-unknown-linux-gnu ]; then"
+avrbinutilscom[29]="  install -v -d /usr/x86_64-unknown-linux-gnu"
+avrbinutilscom[30]="fi"
+avrbinutilscom[31]="cp -r /tmp/usr/x86_64-unknown-linux-gnu/avr /usr/x86_64-unknown-linux-gnu/"
 avrbinutilscom[32]="rm -rf /tmp/usr"
 rtrncommands=(${avrbinutilscom[@]})
 } # end avrbinutilsComms
 #
 avrgccComms () {
 local avrgcccom=""
-avrgcccom[0]="case \$(uname -m) in"
-avrgcccom[1]="  i?86) sed -i 's/^T_CFLAGS =$/& -fomit-frame-pointer/' gcc/Makefile.in ;;"
-avrgcccom[2]="esac"
-avrgcccom[3]="sed -i 's/install_to_\$(INSTALL_DEST) //' libiberty/Makefile.in"
-avrgcccom[4]="sed -i -e /autogen/d -e /check.sh/d fixincludes/Makefile.in"
-avrgcccom[5]="mv -v libmudflap/testsuite/libmudflap.c++/pass41-frag.cxx{,.disable}"
+avrgcccom[0]='export CFLAGS="-O2 -pipe"'
+avrgcccom[1]='export CXXFLAGS="-O2 -pipe"'
+avrgcccom[2]="sed -i 's/install_to_\$(INSTALL_DEST) //' libiberty/Makefile.in"
+avrgcccom[3]="sed -i '/ac_cpp=/s/\\\$CPPFLAGS/\\\$CPPFLAGS -O2/' libiberty/configure"
+avrgcccom[4]="sed -i '/ac_cpp=/s/\\\$CPPFLAGS/\\\$CPPFLAGS -O2/' gcc/configure"
+avrgcccom[5]="rm -rf ../gcc-build"
 avrgcccom[6]="mkdir -v ../gcc-build"
 avrgcccom[7]="cd ../gcc-build"
 avrgcccom[8]="../gcc-${gccvers}/configure --prefix=/usr               \\"
@@ -2042,12 +2042,13 @@ avrgcccom[36]="                 --with-ld=/usr/bin/avr-ld \\"
 avrgcccom[37]="                 --with-plugin-ld=ld.gold \\"
 avrgcccom[38]="                 --with-system-zlib"
 avrgcccom[39]="make"
-avrgcccom[40]='make DESTDIR="/tmp/" install'
+avrgcccom[40]="make DESTDIR=/tmp install"
 avrgcccom[41]='find /tmp/usr/lib -type f -name "*.a" \'
 avrgcccom[42]="   -exec /usr/bin/avr-strip --strip-debug '{}' \\;"
 avrgcccom[43]="cp /tmp/usr/bin/avr-*  /usr/bin/"
 avrgcccom[44]="cp -r /tmp/usr/lib/gcc/avr  /usr/lib/gcc/"
 avrgcccom[45]="cp /tmp/usr/share/man/man1/avr-* /usr/share/man/man1"
+avrgcccom[46]="rm -rf /tmp/usr"
 rtrncommands=(${avrgcccom[@]})
 } # end avrgccComms
 #
@@ -2869,6 +2870,13 @@ EOF
   echo "SrcName=$srcname" >> $Output
 # define sourcedir in the build file
   case $pkgname in
+    avr-binutils)
+     echo "sourcedir=${PKGUSERDIR}/core/binutils
+blfsfiles=${blfsBuildFiles}/${blfsfiles}" >> $Output
+    ;;
+    avr-gcc)
+     echo "sourcedir=${PKGUSERDIR}/core/gcc"  >> $Output
+    ;;
     boost|cups|gnome-menus|gnome-panel|gnm-scrnsaver|gnome-shell|nss|smpeg) # need to define blfsfiles to apply patches
      echo "sourcedir=${srcrootdir}/${Section}
 blfsfiles=${blfsBuildFiles}/${blfsfiles}" >> $Output
@@ -3371,6 +3379,8 @@ chgrp install /usr/share/cups/data # for cups-filters
 chmod g+w,o+t /usr/share/cups/data
 chgrp install /usr/share/cups/drv
 chmod g+w,o+t /usr/share/cups/drv
+chgrp install /usr/share/cups/mime # for cups-filters
+chmod g+w,o+t /usr/share/cups/mime
 chgrp install /usr/share/cups/ppdc
 chmod g+w,o+t /usr/share/cups/ppdc
 chgrp install /etc/cups
@@ -3415,14 +3425,26 @@ chown root:lp /var/cache/cups/rss
 chown root:lp /var/spool/cups
 chown root:lp /var/spool/cups/*
 chown root /usr/sbin/cupsd
+chown root /usr/lib/cups/cgi-bin
 chown root /usr/lib/cups/cgi-bin/*.cgi
 chown root /usr/lib/cups/filter/{commandtops,pstops}
+chown root /usr/lib/cups/notifier
 chown root /usr/lib/cups/notifier/dbus
-chown root /usr/lib/cups/backend/usb
 if [ "$SYSTEMD" = yes ]; then
-cat > /etc/udev/rules.d/10-local.rules << "RULESEOF"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="413c", ATTRS{idProduct}=="5603", GROUP="lp", MODE:="664"
-RULESEOF
+  rm -rf /etc/rc*.d
+  rm -rf /etc/init.d/cups
+  cat > /etc/pam.d/cups << "EOFPAM"
+# Begin /etc/pam.d/cups
+
+auth		required	pam_unix.so
+account		required	pam_unix.so
+session		required	pam_unix.so
+
+# End /etc/pam.d/cups
+EOFPAM
+sed -i 's|^Exec=htmlview http://localhost:631/|Exec=xdg-open http://localhost:631/|g' /usr/share/applications/cups.desktop
+ln -s cups.service /usr/lib/systemd/system/cupsd.service
+chown -h cups:cups /etc/pam.d/cups /usr/lib/systemd/system/cupsd.service
 fi
 EOF
     ;;
@@ -3430,6 +3452,7 @@ EOF
            cat >> $Output << "EOF"
 chown root /usr/lib/cups/backend
 chmod 755  /usr/lib/cups/backend
+chown root /usr/lib/cups/backend/usb
 chown root /usr/lib/cups/filter/{bannertopdf,pdftopdf,pdftops,pstopdf}
 EOF
     ;;
@@ -4455,6 +4478,12 @@ chgrp install /usr/share/fonts
 chmod g+w,o+t /usr/share/fonts
 EOF
     ;;
+    xkeyboard-config)
+           cat >> $Output << "EOF"
+chgrp install /usr/share/X11/xkb
+chmod g+w,o+t /usr/share/X11/xkb
+EOF
+    ;;
     $xlib)
            cat >> $Output << "EOF"
 chgrp install /usr/share/X11
@@ -4662,13 +4691,6 @@ ErrorPolicy retry-job
 EOFCUPS
 chown root:lp /etc/cups/printers.conf
 chmod 600 /etc/cups/printers.conf
-if [ "$SYSTEMD" = yes ]; then
-  install -Dm644 ${blfsfiles}/service/cupsd.service /usr/lib/systemd/system
-  chown cups:cups /usr/lib/systemd/system/cupsd.service
-  cat > /etc/udev/rules.d/10-local.rules << "RULESEOF"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="413c", ATTRS{idProduct}=="5603", GROUP="lp", MODE:="664"
-RULESEOF
-fi
 EOF
        fi
     ;;
@@ -5300,12 +5322,13 @@ EOF
 case $srcname in
    avr-binutils-) # usr the core/binutils source file
     cat << "EOF"
-cd $(tar vxf /usr/src/core/binutils/binutils-*.tar.*z* | awk -F\/ 'END{print $1}')
+cp ${blfsfiles}/patches/avr/binutils*.patch .
+cd $(tar vxf ${sourcedir}/binutils-*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    avr-gcc-) # use the core/gcc source file
     cat << "EOF"
-cd $(tar vxf /usr/src/core/gcc/gcc-*.tar.*z* | awk -F\/ 'END{print $1}')
+cd $(tar vxf ${sourcedir}/gcc-*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
    ;;
    boost_) # need a patch
@@ -5333,7 +5356,7 @@ EOF
    ;;
    cups-1) # need a patch from patches/pst
     cat << "EOF"
-cp ${blfsfiles}/patches/pst/cups-systemd-socket.patch .
+cp ${blfsfiles}/patches/pst/cups-*.patch .
 cp ${sourcedir}/${SrcName}*.* .
 cd $(tar vxf ${SrcName}*.tar.*z* | awk -F\/ 'END{print $1}')
 EOF
@@ -5718,6 +5741,12 @@ rm -rf libreoffice-translations*
 cd $(tar vxf ${SrcName}[0-9]*.tar.*z* --no-overwrite-dir | awk -F\/ 'END{print $1}')
 EOF
    ;;
+   libxkbcommon-) # git the source
+    cat << "EOF"
+if [ ! -d libxkbcommon ]; then git clone git://github.com/xkbcommon/libxkbcommon; fi
+cd libxkbcommon
+EOF
+   ;;
    Linux-PAM-|libusb-) # do not want to untar the docs or libusb-compat
     cat << "EOF"
 cp ${sourcedir}/${SrcName}*.* .
@@ -5848,6 +5877,12 @@ if [ ! -e $tieixhashSrc ]; then
 wget $wgetopts http://search.cpan.org/CPAN/authors/id/C/CH/CHORNY/${tieixhashSrc}
 fi
 cd $(tar vxf $tieixhashSrc | awk -F\/ 'END{print $1}')
+EOF
+   ;;
+   wayland-) # git the source
+    cat << "EOF"
+if [ ! -d wayland ]; then git clone git://anongit.freedesktop.org/wayland/wayland; fi
+cd wayland
 EOF
    ;;
    xcb-util-)
@@ -6116,12 +6151,11 @@ case $pkgname in
            GetCommands \
             | sed -e '/useradd/,/usermod/d' \
                   -e '/sed -i/d' \
-                  -e '/patch -Np1 -i/i patch -Np1 -i ../cups-systemd-socket.patch' \
+                  -e '/patch -Np1 -i/i patch -Np1 -i ../cups-systemd-socket.patch\npatch -Np1 -i ../cups-dbus-utf8.patch' \
                   -e 's/--with-system-groups=lpadmin/--with-system-groups=lpadmin \\\n  --with-systemdsystemunitdir=\/usr\/lib\/systemd\/system/' \
                   -e '/make install-cups/d' \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BUILDROOT)\\\\\$(DBUSDIR)\\\/system.d; \\\\\\\/d' desktop\/Makefile" \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LOCALEDIR)/d' locale\/Makefile" \
-                  -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(DATADIR)\\\/mime/d' conf\/Makefile" \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man1/d' man\/Makefile" \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man5/d' man\/Makefile" \
                   -e "/make install/i\  sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man7/d' man\/Makefile" \
@@ -6147,7 +6181,6 @@ case $pkgname in
                   -e '/make install-cups/d' \
                   -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(BUILDROOT)\\\\\$(DBUSDIR)\\\/system.d; \\\\\\\/d' desktop\/Makefile" \
                   -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(LOCALEDIR)/d' locale\/Makefile" \
-                  -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(DATADIR)\\\/mime/d' conf\/Makefile" \
                   -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man1/d' man\/Makefile" \
                   -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man5/d' man\/Makefile" \
                   -e "/make install/ i sed -i '/\\\\\$(INSTALL_DIR) -m 755 \\\\\$(MANDIR)\\\/man7/d' man\/Makefile" \
@@ -6797,6 +6830,12 @@ print $0;
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    libxkbcommon)
+      GetInternalCommands basicComms \
+       | sed -e 's/\.\/configure/\.\/autogen.sh/' \
+             -e 's/disable-static/disable-static \\\n\              --with-xkb-config-root=\/usr\/share\/X11\/xkb/' \
+        >> $Output
+    ;;
     libxml2)
        GetCommands \
         | sed -e '/tar xf ../d' \
@@ -7240,6 +7279,12 @@ print $0;
     wavpack)
        GetInternalCommands basicComms \
         | sed -e 's/disable-static/disable-static --enable-mmx/' \
+        >> $Output
+    ;;
+    wayland)
+       GetInternalCommands basicComms \
+        | sed -e 's/\.\/configure/\.\/autogen.sh/' \
+              -e 's/disable-static/disable-static \\\n\              --disable-documentation/' \
         >> $Output
     ;;
     webkitgtk)
