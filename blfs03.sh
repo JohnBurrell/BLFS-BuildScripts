@@ -42,6 +42,7 @@ pathappend () {
         export $PATHVARIABLE="${!PATHVARIABLE:+${!PATHVARIABLE}:}$1"
 }
 
+export -f pathremove pathprepend pathappend
 
 # Set the initial path
 export PATH=/bin:/usr/bin
@@ -54,6 +55,11 @@ fi
 # Setup some environment variables.
 export HISTSIZE=1000
 export HISTIGNORE="&:[bf]g:exit"
+
+# Set some defaults for graphical systems
+export XDG_DATA_DIRS=${XDG_DATA_DIRS:-/usr/share/}
+export XDG_CONFIG_DIRS=${XDG_CONFIG_DIRS:-/etc/xdg/}
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xdg-$USER}
 
 # Setup a red prompt for root and a green one for users.
 NORMAL="\[\e[0m\]"
@@ -71,12 +77,22 @@ for script in /etc/profile.d/*.sh ; do
         fi
 done
 
-# Now to clean up
-unset pathremove pathprepend pathappend
+unset script RED GREEN NORMAL
 
 # End /etc/profile
 EOF
 install --directory --mode=0755 --owner=root --group=root /etc/profile.d
+cat > /etc/profile.d/bash_completion.sh << "EOF"
+# Begin /etc/profile.d/bash_completion.sh
+# Import bash completion scripts
+
+for script in /etc/bash_completion.d/*.sh ; do
+        if [ -r $script ] ; then
+                . $script
+        fi
+done
+# End /etc/profile.d/bash_completion.sh
+EOF
 cat > /etc/profile.d/dircolors.sh << "EOF"
 # Setup for /bin/ls to support color, the alias is in /etc/bashrc.
 if [ -f "/etc/dircolors" ] ; then
@@ -123,7 +139,7 @@ fi
 EOF
 cat > /etc/profile.d/i18n.sh << "EOF"
 # Set up i18n variables
-export LANG=en_US.ISO-8859-1
+export LANG=en_US.UTF-8
 EOF
 cat > /etc/bashrc << "EOF"
 # Begin /etc/bashrc
@@ -138,10 +154,11 @@ cat > /etc/bashrc << "EOF"
 # should go into ~/.bash_profile.  Personal aliases and functions should
 # go into ~/.bashrc
 
-# Provides a colored /bin/ls command.  Used in conjunction with code in
-# /etc/profile.
+# Provides colored /bin/ls and /bin/grep commands.  Used in conjunction
+# with code in /etc/profile.
 
 alias ls='ls --color=auto'
+alias grep='grep --color=auto'
 
 # Provides prompt for non-login shells, specifically shells started
 # in the X environment. [Review the LFS archive thread titled
@@ -157,6 +174,8 @@ else
   PS1="$GREEN\u [ $NORMAL\w$GREEN ]\$ $NORMAL"
 fi
 
+unset RED GREEN NORMAL
+
 # End /etc/bashrc
 EOF
 cat > ~/.bash_profile << "EOF"
@@ -171,29 +190,18 @@ cat > ~/.bash_profile << "EOF"
 # environment variables and startup programs are in /etc/profile.
 # System wide aliases and functions are in /etc/bashrc.
 
-append () {
-  # First remove the directory
-  local IFS=':'
-  local NEWPATH
-  for DIR in $PATH; do
-     if [ "$DIR" != "$1" ]; then
-       NEWPATH=${NEWPATH:+$NEWPATH:}$DIR
-     fi
-  done
-
-  # Then append the directory
-  export PATH=$NEWPATH:$1
-}
-
 if [ -f "$HOME/.bashrc" ] ; then
   source $HOME/.bashrc
 fi
 
 if [ -d "$HOME/bin" ] ; then
-  append $HOME/bin
+  pathprepend $HOME/bin
 fi
 
-unset append
+# Having . in the PATH is dangerous
+#if [ $EUID -gt 99 ]; then
+#  pathappend .
+#fi
 
 # End ~/.bash_profile
 EOF
@@ -209,29 +217,18 @@ cat > /etc/skel/.bash_profile << "EOF"
 # environment variables and startup programs are in /etc/profile.
 # System wide aliases and functions are in /etc/bashrc.
 
-append () {
-  # First remove the directory
-  local IFS=':'
-  local NEWPATH
-  for DIR in $PATH; do
-     if [ "$DIR" != "$1" ]; then
-       NEWPATH=${NEWPATH:+$NEWPATH:}$DIR
-     fi
-  done
-
-  # Then append the directory
-  export PATH=$NEWPATH:$1
-}
-
 if [ -f "$HOME/.bashrc" ] ; then
   source $HOME/.bashrc
 fi
 
 if [ -d "$HOME/bin" ] ; then
-  append $HOME/bin
+  pathprepend $HOME/bin
 fi
 
-unset append
+# Having . in the PATH is dangerous
+#if [ $EUID -gt 99 ]; then
+#  pathappend .
+#fi
 
 # End ~/.bash_profile
 EOF
@@ -294,23 +291,35 @@ dircolors -p > /etc/skel/.dircolors
 cat > ~/.vimrc << "EOF"
 " Begin .vimrc
 
-set columns=80
+set columns=105
 set wrapmargin=8
 set ruler
+set nocompatible
+set backspace=2
+syntax on
+if (&term == "iterm") || (&term == "putty")
+  set background=dark
+endif
 
 " End .vimrc
 EOF
 cat > /etc/skel/.vimrc << "EOF"
 " Begin .vimrc
 
-set columns=80
+set columns=105
 set wrapmargin=8
 set ruler
+set nocompatible
+set backspace=2
+syntax on
+if (&term == "iterm") || (&term == "putty")
+  set background=dark
+endif
 
 " End .vimrc
 EOF
 cat > /etc/issue << "EOF"
-LFS 20120902 \n \l \d
+LFS 20180220 \n \l \d
 EOF
 cat > /etc/shells << "EOF"
 # Begin /etc/shells
