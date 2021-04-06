@@ -16,7 +16,7 @@ blfs="blfs"
 if [ "$LFS" = /mnt/lfs ]; then
   echo "Target is $LFS"
 elif [ "$LFS" = local ]; then
-  LFS="/" # local machine
+  LFS="" # local machine
   echo "Target is local machine"
 else
   echo "Don't recognise $LFS. Edit this script."
@@ -281,7 +281,7 @@ case $exit_status in
            display="If yes or Arch, the version numbers of the src packages for this SECTION are updated using the Arch Linux website. This is used for those packages that are not in the book (for e.g. python-modules). Default is yes"
        ;;
        SECTION)
-           display="options are blfs, security, virtualization, libraries, genutils, sysutils, programming, perlmodules, pythonmodules, pythonmodbin, java, networks, server, x, xlibs, displaymanager, windowmanager, icons, gnomeplatform, telepathy, gnomedesktop, gnomeapps, xfce, xfcegnomeplatform, xfcegnomedesktop, xfcebrowser, lxde, kdeforlxqt, lxdeforlxqt, lxqt, browser, office, xsoftware, multimedia, pst, avr, emergent, openelec, kodi,  nvidia"
+           display="options are blfs, security, virtualization, libraries, genutils, sysutils, programming, perlmodules, pythonmodules, pythonmodbin, java, networks, server, x, xlibs, displaymanager, windowmanager, icons, gnomeplatform, telepathy, gnomedesktop, gnomeapps, xfce, xfcegnomeplatform, xfcegnomedesktop, xfcebrowser, lxde, kdeforlxqt, lxdeforlxqt, lxqt, browser, office, xsoftware, multimedia, pst, avr, emergent, openelec, kodibin,  nvidia"
        ;;
        XORG_PREFIX)
            display="Choose the installation prefix for Xorg"
@@ -1494,6 +1494,9 @@ case $pkgPlusVers in
 #   gcc-*)
 #      pkgvers=$(echo $pkgPlusVers | awk -F\- '{print $2"-"$NF}')
 #   ;;
+   gimp-help-*)
+      pkgvers=$(echo $pkgPlusVers | awk -F\- '{print $3"-"$4"-"$5}')
+   ;;
    ImageMagick-*) # versions are of the form 7.0.10-43
       pkgvers=$(echo $pkgPlusVers | awk -F\- '{print $2"-"$NF}')
    ;;
@@ -1697,6 +1700,9 @@ if [ $num -gt 0 ]; then
             RtrnVars[0]="${RtrnVars[0]}_"
             versionPlus="${fileToUse#${pkgnm}*}"
             RtrnVars[1]=$(echo $versionPlus | awk -F\_ '{print $1}')
+       ;;
+       gimp-help-*)
+            getPkgVersion $fileToUse ".tar"
        ;;
        gnome-user-docs-*)
             getPkgVersion $fileToUse ".tar" # version after the docs-
@@ -2535,7 +2541,7 @@ for (( i=0; i<${#SrcNames[@]}; i++ )); do
       processit=false
     ;;
 # xlibs
-    pangox-compat-|qtbase-everywhere-src-|qtsvg-everywhere-src-|qtx11extras-everywhere-src-|wxWidgets-)
+    gtk-|pangox-compat-|qtbase-everywhere-src-|qtsvg-everywhere-src-|qtx11extras-everywhere-src-|wxWidgets-)
       echo "don't process $currentSrcFile not in the book"
       processit=false
     ;;
@@ -2688,7 +2694,7 @@ for (( i=0; i<${#SrcNames[@]}; i++ )); do
                              versionPlus="${fileToDnld#${RtrnVars[0]}*}"
                              RtrnVars[1]=$(echo $versionPlus | awk -F\- '{print $1"-"$2}')
                            ;;
-                           cdparanoia-III-*|cyrus-sasl-*|mypaint-brushes-*|net-tools-*|sgml-common-*)
+                           cdparanoia-III-*|cyrus-sasl-*|gnome-tweaks-*|mypaint-brushes-*|net-tools-*|sgml-common-*)
                              RtrnVars[0]=$(echo $fileToDnld | awk -F\- '{print $1"-"$2}')
                              RtrnVars[0]="${RtrnVars[0]}-"
                              versionPlus="${fileToDnld#${RtrnVars[0]}*}"
@@ -2743,6 +2749,9 @@ for (( i=0; i<${#SrcNames[@]}; i++ )); do
                       ;;
                       exiv2-*)
                         getPkgVersion $fileToDnld "-Source"
+                      ;;
+                      gimp-help-*)
+                        getPkgVersion $fileToDnld ".tar"
                       ;;
                       git-[0-9]*) # not git-manpages or git-htmldocs
                         getPkgVersion $fileToDnld ".tar"
@@ -3745,30 +3754,26 @@ if [ "$4" = commit ]; then # use GITINFO
 else
   local commitInfo=$SVNINFO
 fi
-#echo "commitInfo is $commitInfo"
 AllInfo=$( echo $commitInfo | awk -v pattern=$4 'BEGIN{ RS = "|" };$0 ~ pattern {print $0}' )
 for dir in $DumpedCommands $Dumpedhtml; do
   if [ ! -d $dir ]; then
     install -v -m0755 -d $dir
-    touch ${dir}/.${4} # prevent cat error meassage below
   else # check if there is already a revision or commit file
-    if [ ! -e ${dir}/.${4} ]; then
-      touch ${dir}/.${4} # prevent cat error msg
-#      echo ".$4 added to $dir"
-#    else
-#      echo "Found ${dir}/.${4}"
+    if [ -e "${dir}/.${4}" ]; then
+      echo "Found ${dir}/.${4}"
     fi 
   fi
 done
-#echo "AllInfo is $AllInfo"
-local comp=$( cat ${dir}/.${4} | awk -v pattern=$4 '$0 ~ pattern {print $0}')
-#echo "comp is $comp"
+local comp=""
+if [ -e "${dir}/.${4}" ]; then
+  comp=$( cat ${dir}/.${4} | awk -v pattern=$4 '$0 ~ pattern {print $0}')
+fi
 for dir in $Dumpedhtml $DumpedCommands; do
   if [ -e "$dir" -a "$AllInfo" != "$comp" ]; then # remove the old contents of $DumpedCommands $Dumpedhtml
     rm -rf $dir/*
     touch ${dir}/.${4}
     pushd $REPODIR
-        make -j1 DUMPDIR=$DumpedCommands BASEDIR=$Dumpedhtml REV=$rev $target dump-commands
+        make -j1 DUMPDIR=$DumpedCommands BASEDIR=$Dumpedhtml REV=$rev $target "dump-commands"
         for dir in $DumpedCommands $Dumpedhtml; do
           echo $commitInfo | awk 'BEGIN{ RS = "|" }; {print $0}' > ${dir}/.${4}
         done
@@ -3824,6 +3829,16 @@ for (( i=0; i<$numb; i++ )); do
               countg=$jk
               break
            ;;
+           popd*)
+              if $isPushd; then # write it until popd found
+                combine[countc++]="  ${commands[jk]}"
+                ((countg++))
+                isPushd=false
+              else # unlikely to get here as a popd must have an associated pushd
+                countg=$jk
+                break
+              fi
+           ;;
            'LANG="en_US.UTF-8" make') # the media-player-info make command
               countg=$jk
               break
@@ -3841,18 +3856,28 @@ for (( i=0; i<$numb; i++ )); do
               break
            ;;
            *"python3 setup.py install"*|*"python2 setup.py install"*) # single python2/3 command
-              countg=$jk
-              break
+              if $isPushd; then # write it until popd found
+                combine[countc++]="  ${commands[jk]}"
+                ((countg++))
+              else
+                countg=$jk
+                break
+              fi
            ;;
            *"python2 setup.py"*"build"*|*"python3 setup.py"*"build"*) # e.g. py2-numpy, py3-numpy
               countg=$jk
               break
            ;;
            "pushd ipython"*) # install section for ipython
-              countg=$jk
+              combine[countc++]="  ${commands[jk]}"
+              ((countg++))
+# need to write until a popd found
+           ;;
+           "pushd simplegeneric"*)
+              isPushd=true
               break
            ;;
-           *"export RUSTFLAGS"*) # rustc, goes with teh python3 command
+           *"export RUSTFLAGS"*) # rustc, goes with the python3 command
               countg=$jk
               break
            ;;
@@ -3960,6 +3985,15 @@ for (( i=0; i<$numb; i++ )); do
               combine[countc++]="  ${commands[jl]}" # make commands
               ((countg++))
            ;;
+           "python3 setup.py install"*)
+              if $isPushd; then # write it as it is part of a pushd command
+                combine[countc++]="  ${commands[jl]}"
+                ((countg++))
+              else # install command
+                countg=$jl
+                break
+              fi
+           ;;
            *install*) # assume an install command
               case ${commands[jl]} in
                  *"/usr/bin/bjam"*) # this is boost so stay in make
@@ -3992,9 +4026,19 @@ for (( i=0; i<$numb; i++ )); do
               countg=$jl
               break
            ;;
-           "pushd ipython"*) # install section for ipython
-              countg=$jl
+           "pushd simplegeneric"*) # write it
+              combine[countc++]="  ${commands[jl]}"
+              ((countg++))
+              inc=true
+           ;;
+           "pushd backcall"*)
+              isPushd=true
               break
+           ;;
+           popd*)
+              combine[countc++]="  ${commands[jl]}"
+              ((countg++))
+              isPushd=false
            ;;
            "export LIBSSH2"*) # rustc, goes with the DESTDIR command
               countg=$jl
@@ -4042,7 +4086,6 @@ for (( i=0; i<$numb; i++ )); do
     install_commands*)
       inc=false
       foundDoc=false
-      foundpushd=false # used with ipython to keep all install commands together
       kodidone=false # kodi has a for loop which goes in install, so need the done to terminate it
       cur_countg=$countg
       combine[countc++]=${buildWrap[countbl++]}
@@ -4213,7 +4256,7 @@ for (( i=0; i<$numb; i++ )); do
              fi
           ;;
           sed*)
-             if $foundpushd; then # write it
+             if $isPushd; then # write it, part of ipython commands
                combine[countc++]="  ${commands[jm]}"
                ((countg++))
              else
@@ -4232,24 +4275,25 @@ for (( i=0; i<$numb; i++ )); do
              cont=0
              inc=true
           ;;
-          "pushd ipython"*) # install section of ipython - write it
-             combine[countc++]="  ${commands[jm]}"
-             ((countg++))
-             inc=true
-             foundpushd=true
-          ;;
-          "pushd"*)
-             if $foundpushd; then # write it
+          "pushd backcall"*) #ipython - write it
+             if $isPushd; then
                combine[countc++]="  ${commands[jm]}"
                ((countg++))
-             else # break
+               inc=true
+             else # won't get here
                break
              fi
           ;;
+          "pushd ipython-"*) # last ipython pushd
+             combine[countc++]="  ${commands[jm]}"
+             ((countg++))
+             isPushd=true
+          ;;
           popd*)
-             if $foundpushd; then # write it
+             if $isPushd; then # write it
                combine[countc++]="  ${commands[jm]}"
                ((countg++))
+               isPushd=false
              else # break
                break
              fi
@@ -4347,26 +4391,26 @@ local -a dummyarray=""
 local localpkgname=$1
 local commandsection=$2
 local i
-if [[ "$localpkgname" == ffmpeg || "$localpkgname" == atk || "$localpkgname" == jdkbin ]]; then # avoid at-spi2-atk which *-atk matches and gcc-java
-  curfile=${DumpedCommands}/${commandsection}/???-${commandname}
-else
-  if [ -e ${DumpedCommands}/${commandsection}/*-${commandname} ]; then
-    curfile=${DumpedCommands}/${commandsection}/*-${commandname}
-  else
-    echo -e 'echo "No commands matching '"${blfscommands}"'/'"${commandsection}"'/*-'"${commandname}"'"'
-    echo 'echo "Either adjust the command name or add some commands. Exiting now"'
-    echo "exit 1"
-    exit 1
-  fi
-fi
+#
+curfile="${DumpedCommands}/${commandsection}/???-${commandname}"
+#
 local IFS='
 '
 acom=( $( < $curfile ) )
-#for ((jkl=0; jkl<${#acom[@]}; jkl++)); do
+local numComs=${#acom[@]}
+if [ $numComs -eq 0 ]; then
+  echo "No commands found for $curfile"
+  echo "Aborting Now"
+  exit 1
+#else
+#  echo "numComs=$numComs"
+fi
+#
+#for ((jkl=0; jkl<$numComs; jkl++)); do
 #  echo "acom[$jkl] is ${acom[jkl]}"
 #done
 #
-# this section changes the commands as necessary before writing them to $Output
+# the following section changes the commands as necessary before writing them to $Output
 case $localpkgname in
      aspell)
              ic=0
@@ -6250,6 +6294,29 @@ grepcom[2]="make install"
 rtrncommands=(${grepcom[@]})
 } # end grepComms
 #
+gtk4Comms () {
+local gtk4com=""
+gtk4com[0]="mkdir build"
+gtk4com[1]="cd build"
+gtk4com[2]='CFLAGS+=" -DG_ENABLE_DEBUG -DG_DISABLE_CAST_CHECKS -DG_DISABLE_ASSERT"'
+gtk4com[3]="arch-meson \\"
+gtk4com[4]="   -D broadway-backend=true \\"
+gtk4com[5]="   -D tracker=enabled \\"
+gtk4com[6]="   -D colord=enabled \\"
+gtk4com[7]="   -D gtk_doc=false \\"
+gtk4com[8]="   -D man-pages=true \\"
+gtk4com[9]="  .."
+gtk4com[10]="ninja"
+gtk4com[11]="ninja install"
+gtk4com[12]='cat > /usr/share/gtk-4.0/settings.ini << "EOF"'
+gtk4com[13]="[Settings]"
+gtk4com[14]="gtk-icon-theme-name = Adwaita"
+gtk4com[15]="gtk-theme-name = Adwaita"
+gtk4com[16]="gtk-font-name = Cantarell 11"
+gtk4com[17]="EOF"
+rtrncommands=(${gtk4com[@]})
+} # end gtk4Comms
+#
 hamcrestComms () {
 local hamcrestcom=""
 hamcrestcom[0]="install -v -dm755 /usr/share/java/\${_libname}"
@@ -7140,11 +7207,6 @@ case $pkgname in
           pycom[1]="python2 setup.py build"
           pycom[2]="python2 setup.py install --skip-build --optimize=1"
    ;;
-   py2-pillow)
-          pycom[0]="python2 setup.py build"
-          pycom[1]="python2 setup.py install --optimize=1"
-          pycom[2]="install -m644 -t \"/usr/include/python2.7/\" src/libImaging/*.h"
-   ;;
    py2-xdg|py2-wcwidth|py2-six|py2-dateutil|py2-chardet|py2-backports-os)
           pycom[0]="python2 setup.py install --optimize=1"
    ;;
@@ -7236,6 +7298,11 @@ case $pkgname in
    ;;
    py3-pexpect|py3-pickleshare|py3-ptyprocess)
           pycom[0]="python3 setup.py install --prefix=/usr --optimize=0"
+   ;;
+   py3-pillow)
+          pycom[0]="python3 setup.py build"
+          pycom[1]="python3 setup.py install --optimize=1"
+          pycom[2]="install -m644 -t \"/usr/include/python${py3series}/\" src/libImaging/*.h"
    ;;
    py3-pytz)
           pycom[0]="export LC_ALL=en_US.UTF-8"
@@ -8058,6 +8125,7 @@ else
   countg=0 # initialize commands counter
   cont=0
   isSed=false
+  isPushd=false
   local isMinizip=${2:-false}
   for line in "${commandScripts[@]}"; do
     case "$line" in
@@ -8149,6 +8217,7 @@ else
          break
        ;;
        "pushd ipython"*) # beginning of install section for ipython
+         isPushd=true # write until a popd found
          break
        ;;
        "install -Dm755 setconf.py"*) # setconf install
@@ -15172,9 +15241,6 @@ EOF
 if [ -e /usr/bin/2to3 ]; then
   mv /usr/bin/2to3{,-2.7}
 fi
-if [ ! -e /python2.conf ]; then
-  cp ${blfsfiles}/conf-files/python2.conf /
-fi
 EOF
       else
 	 cat >> $Output << "EOF"
@@ -15797,7 +15863,7 @@ groupadd -g 19 lpadmin && usermod -a -G lpadmin john'
     gtkplus2)
         links="/usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
     ;;
-    gtkplus3) # has to own /usr/bin/gtk-update-icon-cache
+    gtkplus3|gtk4) # has to own /usr/bin/gtk-update-icon-cache
         doFirst="/usr/share/applications"
         links="/usr/share/glib-2.0/schemas/gschemas.compiled /usr/share/icons/hicolor/icon-theme.cache /usr/bin/gtk-update-icon-cache /usr/share/man/man1/gtk-update-icon-cache.1"
     ;;
@@ -16068,6 +16134,9 @@ fi"
     py2-path)
         links="/usr/bin/pasteurize /usr/bin/futurize"
     ;;
+    py3-pillow)
+        doFirst="/usr/include/python${py3series}"
+    ;;
     py2-pyparsing)
         links="/usr/lib/python${py2series}/site-packages/pyparsing-2.4.7-py${py2series}.egg"
     ;;
@@ -16123,6 +16192,7 @@ fi"
     ;;
     samba)
         doFirst="/usr/lib/perl5 /etc/ld.so.conf /usr/lib/cups/backend"
+        links="/usr/lib/python3.9/site-packages/{_tdb_text.py,tdb.cpython-39-x86_64-linux-gnu.so}"
 	otherPrePro="mkdir -pv /run/lock"
     ;;
     sane) 
@@ -16451,8 +16521,14 @@ local spkg=$2
 local trm=$3
 local fext="${spkg#*${srcnm}}" # this is vers # plus .tar.xz or similar
 local vnum="${fext%.${trm}*}" # this is the full vers # e.g 0.16.2
-gnmvers=${vnum%.*} # this is the series number in the gnome URL
-#gnmvers=$(echo $vnum | awk -F\. '{print $1"."$2}') # this is the required version in gnome
+case $srcnm in
+   cantarell-fonts-)
+     gnmvers=$vnum
+   ;;
+   *)
+     gnmvers=${vnum%.*} # this is the series number in the gnome URL
+   ;;
+esac
 revsrcnm=${srcnm%?} # src name without the trailing -
 } # end gnmPkgVers
 #
@@ -17073,7 +17149,7 @@ EOF
             done
         ;;
         Pillow-)
-            cur_vers=${notBookPkgVers[python2-pillow]}
+            cur_vers=${notBookPkgVers[python-pillow]}
             for I in "${!srcURLs[@]}"; do
               if [ "$I" = "$srcname" ]; then # found the srcfile
                 pkgURL=${srcURLs[$I]}
@@ -17294,7 +17370,7 @@ EOF
      esac
    ;;
 # sources not in any BLFS book
-   appstream-glib-|Audacity-|avr-libc-|bash-completion-|celt-|chardet-|confuse-|dialog|dmenu2-|dotconf-|espeak-|farstream-|feh-|fmt-|gcab-|hplip-|hyphen-|i3-|i3lock-|i3status-|ijs-|jack2-|requests-|lapack-|libdazzle-|libedit-|libev-|libgnome-keyring-|libgphoto2-|libnice-|libproxy-|libsass-|libssh-|libunwind-|libvirt-|lilv-|lv2-|media-player-info-|menumaker-|netctl-|nftables-|nltk-|nodejs-|nss-mdns-|ode-|openvpn-|pa_stable_|pkcs11-helper-|ply-|pyasn1-|PyQt5_gpl-|PySocks-|PySolFC-|qtbase-everywhere-src-|qtsvg-everywhere-src-|qtx11extras-everywhere-src-|ragel-|re2-|sassc-|scikit-learn-|Scrapy-|sddm-|serd-|snappy-|sord-|speech-dispatcher-|squid-|sratom-|termcap-|Theano-|tor-|urllib3-|vamp-plugin-sdk-|waf-|wavpack-|weston-|windscribe-|wxWidgets-|yajl-|yaml-|x264-snapshot-)
+   appstream-glib-|Audacity-|avr-libc-|bash-completion-|celt-|chardet-|confuse-|dialog|dmenu2-|dotconf-|espeak-|farstream-|feh-|fmt-|gcab-|gtk-|hplip-|hyphen-|i3-|i3lock-|i3status-|ijs-|jack2-|requests-|lapack-|libdazzle-|libedit-|libev-|libgnome-keyring-|libgphoto2-|libnice-|libproxy-|libsass-|libssh-|libunwind-|libvirt-|lilv-|lv2-|media-player-info-|menumaker-|netctl-|nftables-|nltk-|nodejs-|nss-mdns-|ode-|openvpn-|pa_stable_|pkcs11-helper-|ply-|pyasn1-|PyQt5_gpl-|PySocks-|PySolFC-|qtbase-everywhere-src-|qtsvg-everywhere-src-|qtx11extras-everywhere-src-|ragel-|re2-|sassc-|scikit-learn-|Scrapy-|sddm-|serd-|snappy-|sord-|speech-dispatcher-|squid-|sratom-|termcap-|Theano-|tor-|urllib3-|vamp-plugin-sdk-|waf-|wavpack-|weston-|windscribe-|wxWidgets-|yajl-|yaml-|x264-snapshot-)
      local switch=true
      case $srcname in
 	appstream-glib-)
@@ -17414,6 +17490,19 @@ EOF
               fi
             done
 	;;
+        gtk-)
+            cur_vers=${notBookPkgVers[gtk4]}
+            for I in "${!srcURLs[@]}"; do
+              if [ "$I" = "$srcname" ]; then # found the srcfile
+                pkgURL=${srcURLs[$I]}
+                pkgvers=${opFilename[$I]}
+                break
+              fi
+            done
+            gnmvers=""
+            gnmPkgVers "gtk-" $cur_vers "tar"
+            echo "gtk4series=$gnmvers" >> $Output
+        ;;
         hplip-) # src not in the book
             copyPatches $Section $srcname
             cur_vers=3.17.11
@@ -17530,13 +17619,13 @@ EOF
         libproxy-)
 #            copyPatches $Section $srcname
             cur_vers=${notBookPkgVers[libproxy]}
-           for I in "${!srcURLs[@]}"; do
-             if [ "$I" = "$srcname" ]; then # found the srcfile
-               pkgURL=${srcURLs[$I]}
-               pkgvers=${opFilename[$I]}
-               break
-             fi
-           done
+            for I in "${!srcURLs[@]}"; do
+              if [ "$I" = "$srcname" ]; then # found the srcfile
+                pkgURL=${srcURLs[$I]}
+                pkgvers=${opFilename[$I]}
+                break
+              fi
+            done
         ;;
         libsass-)
             cur_vers=${notBookPkgVers[libsass]}
@@ -18448,8 +18537,8 @@ EOF
    ;;
    gimp-) # make sure the help file is present. If not download it
      getSrcLocal "[0-9]*" "*.*" false
+     echo "helpfile=\"gimp-help-${gimphelpvers}.tar.xz\"" >> $Output
      cat >> $Output << "EOF"
-helpfile=gimp-help-2020-10-07.tar.xz
 if [ ! -e $helpfile ]; then # download it
   wget $wgetopts http://anduin.linuxfromscratch.org/BLFS/gimp/${helpfile}
 fi
@@ -18522,8 +18611,11 @@ EOF
        gtksourceview-3.)
          cur_vers=${notBookPkgVers[gtksourceview3]}
        ;;
-       gtksourceview-4.)
+       gtksourceview-4.) # cp the patch - patch has different name from $SrcName
          cur_vers=${notBookPkgVers[gtksourceview4]}
+         echo "if [ -e \${sourcedir}/gtksourceview4*.patch ]; then
+  cp -v \${sourcedir}/gtksourceview4*.patch .
+fi" >> $Output
        ;;
        gtk-vnc-)
           cur_vers=${notBookPkgVers[gtk-vnc]}
@@ -18575,8 +18667,12 @@ EOF
      esac
      echo "pkgVers=$cur_vers" >> $Output
      if $useArchVersions; then
-       wgetWrite $pkgvers $pkgURL $pkgvers false false true true # cp any patches
-     else
+       case $srcname in
+          cairo-|colord-gtk-)
+            wgetWrite $pkgvers $pkgURL $pkgvers false false true true # cp any patches
+          ;;
+       esac
+    else
        case $srcname in
           cairo-)
             getSrcLocal "*" "*.*" true true # need to get a patch
@@ -21516,6 +21612,9 @@ local IFS='
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
+    gtk4)
+       GetInternalCommands gtk4Comms >> $Output
+    ;;
     gtk-engines)
        if [ "$isSystemdBook" = true ]; then
          GetCommands \
@@ -21561,7 +21660,9 @@ local IFS='
        GetInternalCommands basicComms >> $Output
     ;;
     gtksourceview4)
-       GetInternalCommands basicNinjaComms >> $Output
+       GetInternalCommands basicNinjaComms \
+        | sed -e '/mkdir build/i patch -Np1 -i ../gtksourceview4-4.8.1-buildfix-1.patch' \
+	>> $Output
     ;;
     gucharmap)
        GetCommands \
@@ -21731,9 +21832,7 @@ local IFS='
     ;;
     jdkbin)
        GetCommands \
-        | sed -e 's/OpenJDK-'"${jdkcomvers}"'-bin/\${SrcName}bin/g' \
-              -e '/chown/,/export PATH/d' \
-              -e '/mv -v/a ln -svf ${SrcName}bin /opt/jdk' \
+        | sed -e '/chown -R root:root/d' \
               -e 's/\(.*\)&&$/\1/' \
         >> $Output
     ;;
@@ -22836,7 +22935,7 @@ local IFS='
     py3-beaker)
        GetInternalCommands py3beakerComms >> $Output
     ;;
-    py2-appdirs|py3-appdirs|py2-backports-os|py2-bckptshutil|py3-beautsoup|py2-bflc|py2-pycairo|py2-chardet|py2-contextlib2|py2-cssselect|py3-cssselect|py3-cycler|py2-pycryptodome|py3-pycryptodome|py2-cython|py3-cython|py2-dateutil|py3-pycairo|py3-dateutil|py3-dbusmock|py2-decorator|py3-decorator|py2-funcsigs|py2-future|py3-future|py2-lxml|py3-lxml|py2-m2crypto|py2-docutils|py3-docutils|py2-idna|py2-import-meta|py3-import-meta|py2-kiwisolver|py3-kiwisolver|py2-markupsafe|py3-markupsafe|py2-mako|py3-mako|py2-matplotlib|py3-matplotlib|py2-nltk|py3-nltk|py2-numpy|py3-numpy|py2-ordered-set|py2-packaging|py3-packaging|py2-path|py3-path|py2-pexpect|py3-pexpect|py3-pickleshare|py2-pillow|py2-prmpt_tlkit|py3-prmpt_tlkit|py2-ptyprocess|py3-ptyprocess|py2-pyasn1|py3-pycryptodomex|py2-pygments|py3-pygments|py2-pyparsing|py3-pyparsing|py2-pysocks|py2-pytz|py3-pytz|py3-pyqt5|py2-requests|py2-scandir|py3-sip|py3-simplejson|py2-sklearn|py3-sklearn|py2-scipy|py3-scipy|py2-setuptools_scm|py3-setuptools_scm|py2-six|py3-six|py3-slip|py3-soupsieve|py2-theano|py3-theano|py3-urllib3|py2-wcwidth|py3-wcwidth|py2-xdg|py3-xdg|python-ply|pybind11)
+    py2-appdirs|py3-appdirs|py2-backports-os|py2-bckptshutil|py3-beautsoup|py2-bflc|py2-pycairo|py2-chardet|py2-contextlib2|py2-cssselect|py3-cssselect|py3-cycler|py2-pycryptodome|py3-pycryptodome|py2-cython|py3-cython|py2-dateutil|py3-pycairo|py3-dateutil|py3-dbusmock|py2-decorator|py3-decorator|py2-funcsigs|py2-future|py3-future|py2-lxml|py3-lxml|py2-m2crypto|py2-docutils|py3-docutils|py2-idna|py2-import-meta|py3-import-meta|py2-kiwisolver|py3-kiwisolver|py2-markupsafe|py3-markupsafe|py2-mako|py3-mako|py2-matplotlib|py3-matplotlib|py2-nltk|py3-nltk|py2-numpy|py3-numpy|py2-ordered-set|py2-packaging|py3-packaging|py2-path|py3-path|py2-pexpect|py3-pexpect|py3-pickleshare|py3-pillow|py2-prmpt_tlkit|py3-prmpt_tlkit|py2-ptyprocess|py3-ptyprocess|py2-pyasn1|py3-pycryptodomex|py2-pygments|py3-pygments|py2-pyparsing|py3-pyparsing|py2-pysocks|py2-pytz|py3-pytz|py3-pyqt5|py2-requests|py2-scandir|py3-sip|py3-simplejson|py2-sklearn|py3-sklearn|py2-scipy|py3-scipy|py2-setuptools_scm|py3-setuptools_scm|py2-six|py3-six|py3-slip|py3-soupsieve|py2-theano|py3-theano|py3-urllib3|py2-wcwidth|py3-wcwidth|py2-xdg|py3-xdg|python-ply|pybind11)
        GetInternalCommands pyComms >> $Output
     ;;
     py2-dbus)
@@ -22983,8 +23082,7 @@ local IFS='
     samba)
        if [ "$SYSTEMD" = yes ]; then
          GetCommands \
-          | sed -e '/pip3 install cryptography/,/selftest\/knownfail/d' \
-                -e '/sysconfdir=/i\      --sbindir=\/usr\/bin \\\n\      --libdir=\/usr\/lib \\\n\      --libexecdir=\/usr\/lib\/samba \\' \
+          | sed -e '/sysconfdir=/i\      --sbindir=\/usr\/bin \\\n\      --libdir=\/usr\/lib \\\n\      --libexecdir=\/usr\/lib\/samba \\' \
                 -e 's/pammodulesdir=\/lib/pammodulesdir=\/usr\/lib/' \
                 -e '/mv -v \/usr\/lib\/libnss_win/,/libnss_wins.so.2/d' \
                 -e '/install -dvm 755 \/usr\/lib\/cups\/backend/d' \
@@ -25298,7 +25396,7 @@ elif [[ "$BOOK" == git && "$BOOK_VERSION" != KBLFS ]]; then
   exit 1
 fi
 SECTION=$(echo ${SECTION,,*}) # make sure SECTION is lowercase
-if [ "$SECTION" = pythonmodbin ]; then # install binaries from Arch Linux
+if [[ "$SECTION" = pythonmodbin || "$SECTION" = kodibin ]]; then # install binaries from Arch Linux
   SOURCES="archbinaries"
 fi
 SOURCES=$(echo ${SOURCES,,*}) # make sure SOURCES is lowercase
@@ -27100,6 +27198,33 @@ for (( ij=0; ij<$numSections; ij++ )); do # loop through each section to get the
               fi
             fi
           ;;
+          xsoftware) # need the gimp helpfile version
+            rtrFile=""
+            testNumVers $SOURCEDIR $Section "gimp-help-" ".tar"
+            retval=$?
+            if [ $retval -eq $RETURN_PARAM ]; then
+              echo "Package location ${SOURCEDIR}/${Section} not found"
+              echo "Cannot get the xterm package version number"
+            elif [ $retval -eq $RETURN_FNF ]; then
+              echo "No xterm- src file found in ${SOURCEDIR}/${Section}/"
+              echo "Unable to get the xterm version"
+            elif [ $retval -eq $RETURN_MTOV ]; then
+              echo "found more than one version of the xterm src file in ${SOURCEDIR}/${Section}"
+              echo "latest version is $rtrFile"
+              echo "delete the other(s)"
+              exit 1
+            elif [ $retval -eq 0 ]; then # success
+              echo "found $rtrFile in ${SOURCEDIR}/${Section}"
+              RtrnVars=""
+              getPkgVersion $rtrFile ".tar"
+              if [ ! -z "${RtrnVars[1]}" ]; then
+                gimphelpvers=${RtrnVars[1]}
+                echo "gimphelpvers version is $gimphelpvers"
+              else
+                echo "return from getPkgVersion, RtrnVars is Null - failed to get gimphelp version"
+              fi
+            fi
+	  ;;
         esac
       else # single package requested
         case $SINGLE_PACKAGE in
