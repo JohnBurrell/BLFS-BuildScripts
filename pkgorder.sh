@@ -27,10 +27,14 @@
 ./pst.sh # xmlto
 ./networks.sh # libpsl, serf
 ./programming.sh # cmake, doxygen, cmocka, ccache, sassc, llvm, subversion, rustc, cbindgen, vala
-./libraries.sh # giflib, json-c, libmypaint, mypaint-brushes, yaml, exiv2, libjpeg-turbo, libmng, qpdf, rapidjson, libtiff, snappy, libwebp, yajl, openjpeg2, libical, gcab, graphite2
+./libraries.sh # giflib, json-c, libmypaint, mypaint-brushes, yaml, exiv2, libjpeg-turbo, libmng, qpdf, rapidjson, libtiff, snappy, libwebp, yajl, openjpeg2, libical, gcab, graphite2, muparser
 ./server.sh # openldap and mariadb - completes specified packages
+# if installing lxqt, then
+./lxqticons.sh # hicolor-icon-theme, icon-naming-utils and adwaita-icon-theme
+# else
 ./icons.sh # hicolor-icon-theme, icon-naming-utils and adwaita-icon-theme
-./security.sh # cryptsetup, gnupg, krb5, gpgme and volume_key. Leaves polkit
+# fi
+./security.sh # cryptsetup, gnupg, krb5, libssh, gpgme and volume_key. Leaves polkit
 ./pythonmodbin.sh # install binaries for py2-ordered-set, py2-pyparsing, py2-setuptools
 ./pythonmodules.sh # py2-cssselect to pybind11
 #
@@ -41,31 +45,43 @@
 ./sysutils.sh # systemd with gudev, dbus, bluez
 ./networks.sh # c-ares, libproxy, netctl, iproute2, openvpn, wpa_supplicant, bind-tools, squid
 ./programming.sh # tk and reinstall python2 and 3 for idle support. nodejs, waf, valgrind
-./libraries.sh # libmbim, libqmi, libwacom, libgusb, js78, dbus-glib, libbytesize, libblockdev, jasper
+./libraries.sh # libmbim, libqmi, libwacom, libgusb, js78, dbus-glib, libbytesize, libblockdev, jasper, libportal
 ./security.sh # polkit - completes specified packages
 ./pythonmodules.sh # py3-numpy, py3-scipy, py3-xdg, py3-dbus, py3-dbusmock
 ./xlibs.sh # libdrm, atk, atkmm, gdk-pixbuf, startup-notify, libxklavier, at-spi2, imlib2, graphene
-./multimedia.sh # celt, libcdio, speex, vamp-plugin-sdk, portsmf, serd, sord, gstreamer, libvpx, x264, wavpack, libmusicbrainz, portaudio, libgphoto2, jack2, taglib, media-player-info, x265, pulseaudio, espeak, speechd, smpeg, pysolfc
+./multimedia.sh # celt, libcdio, speex, vamp-plugin-sdk, portsmf, serd, sord, gstreamer, libvpx, x264, wavpack, libmusicbrainz, portaudio, libgphoto2, jack2, taglib, media-player-info, x265, pulseaudio, espeak, speechd, sdl, smpeg, pysolfc
 ./x.sh # libva, mesa, x7app, xcursor-themes, x7font, xkeyboard-config, xterm, xinit, dejavu-fonts
 ./xlibs.sh # cairo, cairomm, glu, freeglut, libepoxy
+# if installing gnome
 ./x.sh # xorg-server, xorg-evdev, xorg-libinput, xorg-amdgpu, twm
+# elif installing lxqt
+./x.sh # xorg-server, xorg-evdev, xorg-libinput, xorg-amdgpu - leaves openbox
 #
 ./libraries.sh # harfbuzz, libgsf, libxkbcommon and poppler
-./xlibs.sh # pango, pangomm, cogl, gtk+2, gtk+3, libnotify, gtk-vnc, clutter clutter-gtk, libdazzle, tepl
+./xlibs.sh # pango, pangomm, cogl, gtk+2, gtk-engines, gtkmm2, gtk+3, gtkmm3, libglade, libnotify, libhandy, amtk, gtk-vnc, gtksourceview3, gtksourceview4, clutter clutter-gtk, libdazzle, tepl
+# for lxqt
+./x.sh # openbox
+#
 ./libraries.sh # libgxps, gspell, librsvg and babl. Also reinstall freetype for harfbuzz support
-./sysutils.sh # accountsservice, colord, modemmanager, udisks, upower
+./sysutils.sh # accountsservice, colord, modemmanager, udisks, upower, weston
 ./multimedia.sh # lv2, sratom, lilv, sdl2, gstreamer plugins, libass, libcanberra, ffmpeg, gst-libav, pavucontrol
 ./pythonmodules.sh # py3-cairo, py3-gobject, py3-matplotlib, py3-atspi. py2 modules no longer installed
 ./programming.sh # sysprof - leaves codelite and cuda
 ./pst.sh # mupdf
 ./xsoftware.sh #  xdg-utils
 ./pst.sh # cups, ghostscript
+# for gnome
 ./gnomeplatform.sh # gnome-common, gset-dsktp-schms, libsecret, yelp-xsl, telp-tools, gnome-menus, libgee, libgtop, gexiv2, gjs, dconf, vte, gconf, gcr, gnome-autoar, gnome-desktop, libwnck, libpeas
+# for lxqt
+./gnomeforlxqt # gset-dsktp-schms, libsecret, gcr, gexiv2
+#
+# for gnome
 ./networks.sh # glib-networking, libsoup, uhttpmock, samba, networkmanager, libnma, network-manager-applet
 ./libraries.sh # gegl, libgrss, and appstream-glib - completes specified packages
 ./xsoftware.sh # gimp 
+# for gnome
 ./icons.sh # gnome-icon-theme, extras, symbolic and gnome-themes-extra - completes specified packages
-# for gnome and openelec
+# for gnome and openelec (for kodi)
 ./telepathy.sh # telepathy-glib, telepathy-logger, mission-control - completes specified packages
 # for xfce
 ./xfcegnomeplatform.sh # if using xfce, gnomeplatform packages for xfce
@@ -76,14 +92,19 @@
 ./java.sh # openjdk
 ./multimedia.sh # gst-plugins-good
 ./genutils.sh # ImageMagick and ibus - completes specified packages
-./gnomeplatform.sh # gssdp, gupnp, gupnp-igd, totem-pl-parser, geocode-glib, grilo, grilo-plugin, libchamplain, libgweather, librest, tracker, tracker-miners, tracker3,  tracker3-miners
-#
+# for gnome
+./gnomeplatform.sh # gssdp, gupnp, gupnp-igd, totem-pl-parser, geocode-glib, grilo, grilo-plugin, libchamplain, libgweather, librest, tracker3,  tracker3-miners
 ./networks.sh # libnice
+#
 ./xlibs.sh # colord-gtk, clutter-gst, qt5-base, qt5-svg, qt5-x11extras
-./networks.sh # avahi, geoclue - completes specified packages 
+# for gnome
+./networks.sh # avahi, geoclue - completes specified packages (don't need libnice for lxqt)
 ./xlibs.sh # webkit2gtk and wxtgk - completes specified packages
 ./gnomeplatform.sh # goa, libgdata, evol-data-server, folks - completes specified packages
 #
+# for lxqt
+./qt5forlxqt.sh
+./lxqticons.sh
 # for xfce
 ./xfcegnomedesktop.sh # gnomedesktop packages for xfce
 ./xfce.sh
@@ -96,10 +117,10 @@
 ./gnomedesktop.sh # gnome-backgrounds, gnome-video-effects, gvfs, nautilus, zenity, gnome-keyring, gnome-settings-daemon, mutter, gnome-shell-extensions, gnome-session, gdm, gnome-user-docs, catarell-fonts, yelp, gsound, gnome-bluetooth, gnome-shell
 # for gnome
 ./gnomeapps.sh # baobab, cheese, gnome-calculator, gnome-color-manager, gnome-dictionary, gnome-nettool, gnome-power-manager, gucharmap, aisleriot, xboard, gnuchess, gnome-chess, gnome-disk-utility, brasero, eog, gedit, evince, gnome-clocks, gnome-system-monitor, gnome-terminal, gnome-user-share, seahorse, gnome-screenshot, gnome-tweaks - completes specified packages
-./gnomedesktop.sh # gnome-control-center -completes specified packages
+./gnomedesktop.sh # gnome-control-center - completes specified packages
 #
 ./pst.sh # cups-filters, gutenprint, sane and xsane - completes specified packages
-./sysutils.sh # notification-daemon, weston
+./sysutils.sh # notification-daemon - completes specified packages
 #
 # ******************************************************************
 # *** install the following on the target machine, not in chroot ***
