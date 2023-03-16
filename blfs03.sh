@@ -78,7 +78,7 @@ for script in /etc/profile.d/*.sh ; do
 done
 
 unset script RED GREEN NORMAL
-
+umask 0022
 # End /etc/profile
 EOF
 install --directory --mode=0755 --owner=root --group=root /etc/profile.d
@@ -327,3 +327,4 @@ cat > /etc/shells << "EOF"
 EOF
 groupadd -g 1000 john
 useradd -m -u 1000 -g john john
+echo "set a password for user john"
