@@ -3,9 +3,9 @@ Copy blfs03.sh, blfsfiles.tar.xz and pkgorder.sh to $LFS. Edit blfs03.sh to add 
 
 Run blfsa as root from your host. Make sure you have already chrooted into LFS from another screen. The script will install section by section, as per the blfs book. Not all sections are in the script at the moment, but the main ones are.
 
-When you first run blfsa, git clone the book by setting the book source to git. Set the SECTION to libraries and UPDATESOURCES to yes and set SOURCES to download. This will create a script called libraries.sh in $LFS and will download the
-sources to /blfs-sources/trunk/libraries in $LFS. Then run the libraries script from within the chroot environment. Carry on like this for each section listed in xorgInstallOrder.sh. The available sections are listed in the config file 
-editor.
+When you first run blfsa, git clone the book by setting the book source to git. Set the SECTION to libraries and UPDATESOURCES to yes and set SOURCES to download. This will create a script called libraries.sh in $LFS and will
+download the sources to /blfs-sources/trunk/libraries in $LFS. Then run the libraries script from within the chroot environment. Carry on like this for each section listed in xorgInstallOrder.sh. The available sections are listed
+in the config file editor.
 
 By all means experiment with the order in xorgInstallOrder.sh, it hasn't been optimized to give the fastest installation of xorg.
 
