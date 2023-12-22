@@ -1,42 +1,37 @@
 #!/bin/bash
 #
 # This assumes you have installed xorg as per xorgInstallOrder.sh
-./libraries.sh # libical gcab libgusb libgxps gspell librsvg babl. Also reinstall freetype for harfbuzz support
-./sysutils.sh # bluez accountsservice colord modemmanager udisks upower
-./multimedia.sh # lv2 sratom lilv sdl2 gstreamer-plugins libass libcanberra ffmpeg gst-libav pavucontrol
 ./pythonmodules.sh # py3-cairo pygobject3 py3-slip py3-matplotlib py3-atspi - completes specified packages
-./xlibs.sh # libhandy gtk-vnc gtksourceview3 gtksourceview4 clutter clutter-gtk libdazzle gtk4 colord-gtk clutter-gst
-./programming.sh # sysprof valgrind - completes specified packages
-./pst.sh # mupdf
+./sysutils.sh # bluez accountsservice colord modemmanager seatd udisks upower
+./multimedia.sh # lv2 sratom lilv gst-plugins-base gst-plugins-bad gst-plugins-ugly pulseaudio libass libcanberra espeak-ng SDL2 sdl12-compat (smpeg) ffmpeg gst-libav pavucontrol libvdpau-va-gl
 ./xsoftware.sh #  xdg-utils
-./pst.sh # cups, ghostscript
-./xfcegnomeplatform.sh # dconf libsecret, gcr, gset-dsktp-schms, vte, libwnck3
-./networks.sh # libsoup uhttpmock samba networkmanager libnma network-manager-applet
-./libraries.sh # gegl libgrss appstream-glib
-./xfceicons.sh # gnome-icon-thme lxde-icon-thme - completes specified packages
+./pst.sh # mupdf cups ghostscript libspectre
+./xlibs.sh # gtk-layer-shell libhandy gtk-vnc gtksourceview4 gtk4 gtksourceview5 colord-gtk libadwaita qt5
+./xfcegnomeplatform.sh # libsecret, gcr3, gset-dsktp-schms, vte, libwnck3 gcr4
+./networks.sh # libproxy  glib-networking iwgtk libsoup2 uhttpmock samba nmap libsoup3 networkmanager libnma netwrk-mngr-app kdsoap avahi  geoclue - completes specified packages
+./libraries.sh # gegl libgrss appstream-glib qca libportal poppler-qt5 - completes specified packages
+./xfceicons.sh # gnome-icon-thme gnm-themes-extra lxde-icon-thme papirus-icon-theme - completes specified packages
 ./java.sh # openjdk
-./multimedia.sh # gst-plugins-good
+./multimedia.sh # gst-plugins-good mlt v4l-utils pipewire vlc - completes specified packages
+./xfcegnomedesktop.sh # dconf gexiv2 gvfs - completes specified packages
 ./genutils.sh # ImageMagick and ibus - completes specified packages.
-./qt5.sh # qt5-base, qt5-svg, t5-x11extras, qt5-declarative, qt5-script, qt5-tools, qt5-translations, qt5-multimedia, qt5-quickcontrols2, qt5-sensors, qt5-networkauth, qt5-wayland - completes specified packages
 ./xfcegnomeplatform.sh # rest
-./networks.sh # kdsoap, avahi, geoclue - completes specified packages (don't need libnice)
 #
-./xlibs.sh # grantlee, webkit2gtk and wxtgk - completes specified packages
-./xfcegnomeplatform.sh # goa, libgdata - completes specified packages
+./xlibs.sh # grantlee tepl webkit2gtk - completes specified packages
+./xfcegnomeplatform.sh # goa, libgdata - completes specified packages 
 ./security.sh # polkit-gnome - completes specified packages
-./xfcegnomedesktop.sh # gexiv2 gvfs - completes specified packages
 ./xsoftware.sh # gimp
-./libraries.sh # qca libportal poppler-qt5 - completes specified packages
 ./xfcexlibs.sh # keybinder3 - completes specified packages
-./xfce.sh # libxfce4util xfconf libxfce4ui exo garcon thunar thunar-volman tumbler xfce4-appfinder xfce4-panel xfce4pwrmngr xfce4-settings xfdesktop xfwm4 xfce4-session xfce4-xkb-plugin parole mousepad xfce4-terminal xfburn ristretto xfce4-notifyd xfce4-screenshooter xfwm4-themes xfce4-pulse-plgn xfce4-whiskmenu-plgn xfce4-sensors-plgn xfce4-date-plgn - completes specified packages
+./x.sh # cantarell-fonts - completes specified packages
+./xfce.sh # libxfce4util xfconf libxfce4ui exo garcon thunar thunar-volman tumbler xfce4-appfinder xfce4-panel xfce4pwrmngr xfce4-settings xfdesktop xfwm4 xfce4-session - completes specified packages
+./xfceapps.sh # parole mousepad xfce4-terminal xfburn ristretto xfce4-notifyd xfce4-xkb-plugin xfce4-screenshooter xfwm4-themes materia-gtk-theme xfce4-pulse-plgn xfce4-whiskmenu-plgn xfce4-sensors-plgn xfce4-date-plgn qpdfview - completes specified packages
 #
-./multimedia.sh # mlt v4l-utils pipewire vlc - completes specified packages (don't need farstream)
-./server.sh # ucd
+./server.sh # ucd - completes specified packages
 #
-./pst.sh # cups-filters gutenprint sane xsane - completes specified packages
+./pst.sh # libcupsfilters libppd cups-filters gutenprint sane simple-scan - completes specified packages
 ./sysutils.sh # weston notification-daemon - completes specified packages
-./security.sh # polkit-gnome - completes specified packages
-./browser.sh # install the Arch Linux chromium binary
+./xfcegnomeapps.sh # aisleriot xboard gnuchess gnome-chess - completes specified packages
+./browser.sh # chromium, installed from the chromium website
 #
 # ******************************************************************
 # *** install the following on the target machine, not in chroot ***
@@ -47,5 +42,6 @@
 # if using sysv
 ./btscrpts.sh # install bootscripts for random, dbus, httpd, mysql, networkmanager, cups and bluetooth
 # if using systemd, need to do these:
-systemctl enable acpid.service avahi-daemon.service bluetooth.service nftables.service ModemManager.service NetworkManager.service cups.service udisks2.service
-# note - wpa_supplicant.service and dhcpcd.service will start at boot time
+systemctl enable acpid.service avahi-daemon.service bluetooth.service nftables.service
+systemctl enable ModemManager.service NetworkManager.service cups.service udisks2.service
+systemctl disable wpa_supplicant.service # if you want to use iwd for internet access
