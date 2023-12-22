@@ -3,25 +3,33 @@ Copy blfs03.sh, blfsfiles.tar.xz and pkgorder.sh to $LFS. Edit blfs03.sh to add 
 
 Run blfsa as root from your host. Make sure you have already chrooted into LFS from another screen. The script will install section by section, as per the blfs book. Not all sections are in the script at the moment, but the main ones are.
 
-When you first run blfsa, svn the book, download the sources and set the section to libraries. This will create a script called libraries.sh in $LFS and will download the sources to /blfs-sources/libraries in $LFS. Then run the libraries script from within the chroot environment.
-Carry on like this for each section. The available sections are listed in the config file editor.
+When you first run blfsa, git clone the book by setting the book source to git. Set the SECTION to libraries and UPDATESOURCES to yes and set SOURCES to download. This will create a script called libraries.sh in $LFS and will download the
+sources to /blfs-sources/trunk/libraries in $LFS. Then run the libraries script from within the chroot environment. Carry on like this for each section listed in xorgInstallOrder.sh. The available sections are listed in the config file 
+editor.
 
-I've included pkgorder.sh which is a suggested order for running the scripts so that the dependencies are met as fast as possible. The optimum package order will depend on your version of LFS. In order to run pkgorder.sh you must have created all the sections mentioned there and have downloaded all the sources. To try and make this easier, I've included an option ALL in the SECTION edit of the config file. This will create the scripts for all the sections and if you have SOURCES set to download, it will download all the sources. Downloading everything will take about 45 minutes.
+By all means experiment with the order in xorgInstallOrder.sh, it hasn't been optimized to give the fastest installation of xorg.
 
 blfsfiles.tar.xz is unpacked to /blfsBuildFiles/blfsfiles and contains all the definitions necessary to build the scripts. You will see two types of files:
-$SECTION-files and $SECTION-dependencies. Have a look at these files. The -files have three names for each package. The first is the package name used to install the package. The second is the name of the source file (minus the version) and the third name is that used in the commands from the xml files. These are in /blfs-commands after you've downloaded the book xml. You can change the order of the packages to try and maximize the rate at which dependencies are met. You can also delete packages if you don't want them or add them as you require.
+$SECTION-files and $SECTION-dependencies. Have a look at these files. The -files have three names for each package. The first is the package name used to install the package. The second is the name of the source file (minus the version)
+and the third name is that used in the commands from the xml files. These are in /blfs-commands after you've downloaded the book xml. You can change the order of the packages to try and maximize the rate at which dependencies are met.
+You can also delete packages, using /usr/bin/listdelpkg.sh, if you don't want them or add them as you require.
 
 The -dependencies files show the dependencies for each package (doh). These should correspond to 'Required' + 'Recommended' in the book. Edit them as things change, as they do frequently - partilculary if a package's section is changed.
 
-Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. You have to specify the correct SECTION for this single package otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
+Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. You have to specify the correct SECTION for this single package
+otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
 
 BTW, I should mention that I've removed a lot of the package documentation from the install. If you need the docs, you should reinstall the package yourself. Also there are no tests run.
 
-Version-3.0 This is a major change to the scripts because it enables you to install the packages using systemd, instead of sysvinit. Of course, first you must have installed LFS using systemd - the scripts in LFS-BuildScripts allow you to do this.
+Version-3.0 This is a major change to the scripts because it enables you to install the packages using systemd, instead of sysvinit. Of course, first you must have installed LFS using systemd - the scripts in LFS-BuildScripts allow you
+to do this.
 
-The BLFS book no longer gives you the option of installing a full Gnome desktop. These BLFS scripts allow you to do this. The latest version of Gnome (3.9.90 soon to be 3.10) requires the Wayland libraries, which require libxkbcommon. As of 2013/08/31 I've added that section. It installs libxkbcommon and the Wayland libraries. The scripts work with systemd, building as a package user. I haven't tested installing everything as root and I haven't tested building Gnome using sysvinit, so I don't know if that's possible.
+The BLFS book no longer gives you the option of installing a full Gnome desktop. These BLFS scripts allow you to do this. The latest version of Gnome (3.9.90 soon to be 3.10) requires the Wayland libraries, which require libxkbcommon.
+As of 2013/08/31 I've added that section. It installs libxkbcommon and the Wayland libraries. The scripts work with systemd, building as a package user. I haven't tested installing everything as root and I haven't tested building Gnome
+using sysvinit, so I don't know if that's possible.
 
-If you don't use systemd but instead decide to use sysvinit, the blfs-bootscripts are usually installed immediately after a package. The package scripts do not do this so you will have to install the bootscripts yourself. Run blfsa and choose SECTION=blfs and SOURCES=download. This will create blfs.sh. To install a script do: ./blfs.sh <scriptname>  e.g. ./blfs.sh dbus or ./blfs.sh httpd. The scripts are installed with package-user name blfs-btscrpts.
+If you don't use systemd but instead decide to use sysvinit, the blfs-bootscripts are usually installed immediately after a package. The package scripts do not do this so you will have to install the bootscripts yourself. Run blfsa and
+choose SECTION=blfs and SOURCES=download. This will create blfs.sh. To install a script do: ./blfs.sh <scriptname>  e.g. ./blfs.sh dbus or ./blfs.sh httpd. The scripts are installed with package-user name blfs-btscrpts.
 
 blfsa is fairly large so there's bound to be bits that don't work because I haven't been able to test them thoroughly. If you find a problem please report it at the linuxquestions.org forum where I advertised this github site - thanks.
 
