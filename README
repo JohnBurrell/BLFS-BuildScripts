@@ -16,8 +16,8 @@ You can also delete packages, using /usr/bin/listdelpkg.sh, if you don't want th
 
 The -dependencies files show the dependencies for each package (doh). These should correspond to 'Required' + 'Recommended' in the book. Edit them as things change, as they do frequently - partilculary if a package's section is changed.
 
-Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. You have to specify the correct SECTION for this single package
-otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
+Finally I've included a SINGLE_PACKAGE option in the config file. If you put a package name in here, a single script for that package (packageName.sh) will be created in $LFS. 
+You have to specify the correct SECTION for this single package otherwise it won't work. If specified, the single package will take precedence over any other specification in the config file. To turn it off, type no against SINGLE_PACKAGE.
 
 BTW, I should mention that I've removed a lot of the package documentation from the install. If you need the docs, you should reinstall the package yourself. Also there are no tests run.
 
